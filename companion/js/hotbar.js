@@ -1,4 +1,4 @@
-// Hotbar touch (T2/M1): grid 3x3/4x3/4x2, drag & drop entre slots só em editMode,
+// Hotbar touch (T2/M1): grid 2x2/3x3/4x4, drag & drop entre slots só em editMode,
 // tooltips de slot e execução de comandos/skills/sequências nativas no jogo.
 // POST /api/command aceita APENAS type command|skill|sequence — Telesto foi removido.
 (function () {
@@ -8,11 +8,11 @@
   const KEY = "hotbar.v1";          // legado v1 (array plano): somente leitura após a migração — não apagar
   const JOBS_KEY = "hotbar.jobs.v2";// { "<jobId>": {slots:[...12], preset}, "0": {...} }
   const GRID_KEY = "hotbar.grid.v1";// preset global: default de buckets novos e usado na migração
-  const MAX_SLOTS = 12; // maior preset (4x3); slots além do grade atual ficam preservados na memória
+  const MAX_SLOTS = 16; // maior preset (4x4); slots além do total do grade ficam preservados na memória
   const PRESETS = {
+    "2x2": { c: 2, r: 2, label: "2×2", n: 4 },
     "3x3": { c: 3, r: 3, label: "3×3", n: 9 },
-    "4x2": { c: 4, r: 2, label: "4×2", n: 8 },
-    "4x3": { c: 4, r: 3, label: "4×3", n: 12 },
+    "4x4": { c: 4, r: 4, label: "4×4", n: 16 },
   };
 
   const wrap = $("hotbar-wrap");
@@ -34,7 +34,7 @@
   // buckets por job: chave = String(player.jobId) ou "0" (sem login / job indisponível)
   const buckets = new Map();
   let currentJobKey = "0"; // chave do bucket em uso agora
-  let gridPreset = "4x3";  // preset do bucket em uso agora
+  let gridPreset = "3x3";  // preset do bucket em uso agora
   let jobsReady = false;   // migração v1 -> v2 já executada (ou nada para migrar)
   let lastJobKey = null;   // última chave vista (detecta troca de job)
 
@@ -83,7 +83,9 @@
   }
   function defaultPreset() {
     const g = localStorage.getItem(GRID_KEY);
-    return PRESETS[g] ? g : "4x3";
+    // preset salvo invalido (inclui grades antigas 4x2/4x3) -> default 3x3;
+    // slots alem do total do grade continuam preservados no array do bucket, so nao renderizados
+    return PRESETS[g] ? g : "3x3";
   }
   function enterBucket(key) {
     // posiciona slots/preset do bucket `key` como estado atual (cria vazio se inexistente)
@@ -575,7 +577,7 @@
   function closeEditor() { editIdx = -1; hideTooltip(); const el = $("hb-editor"); if (el) { el.classList.add("hidden"); el.innerHTML = ""; } }
 
   // ---- popup de ferramentas (único popup: ⚙️) ----
-  // Editar/Pronto, grade (3x3/4x3/4x2), Exportar, Importar. Fecha por toque fora ou botão Fechar.
+  // Editar/Pronto, grade (2x2/3x3/4x4), Exportar, Importar. Fecha por toque fora ou botao Fechar.
   function openTools() {
     closeEditor();
     document.removeEventListener("pointerdown", toolsOutside, true);

@@ -20,6 +20,7 @@
 - [x] **M5 (re-escopo)**: ícones via CDN xivapi (online-first)
 - [x] **M2**: cooldown real nos botões (0.5.9; countdown corrigido 0.5.12 — restante=total−elapsed)
 - [x] **M6**: hotbar POR JOB (0.5.15): buckets por `player.jobId` com troca automática, catálogo de skills por job, export/import v2, chip de job no ⚙️ nos botões — próximo item natural
+- [x] **M7**: modo **Juntas (◫)** — hotbar 50% + mapa 50% (0.5.24); persistido; canvas/id instance único preservado
 - [ ] **M3**: páginas de hotbar (swipe) — avaliar demanda (grid configurável já atende)
 - Qualidade: `scripts/check-dom.mjs` no smoke; lições no `AGENTS.md`; ciclo = build → smoke → versão → APK → deploy PC → commit
 

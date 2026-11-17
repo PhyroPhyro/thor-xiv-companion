@@ -28,8 +28,11 @@
   // 60311 = aetheryte (confere: marca as pedras de invocação / aetherytes).
   // Nenhum ícone de comércio/lojista apareceu nos conjuntos coletados; a classe
   // fica definida para receber ids reais quando confirmados pelos dados.
-  const POI_AETHERYTE_ICONS = new Set([60311]);
-  const POI_COMMERCE_ICONS = new Set();
+  // classes por ícone REAL (inspecionados via xivapi):
+  // 60453 = cristal (aetheryte) | 60311 = chocobinho dourado (aethernet) | 60441 = triângulo (aetheryte de distrito/emerald)
+  const POI_AETHERYTE_ICONS = new Set([60453]);
+  const POI_AETHERNET_ICONS = new Set([60311]);
+  const POI_DISTRICT_ICONS = new Set([60441]);
 
   const MAP_CACHE_KEY = "txmap.v1";
   const RESOLVE_TIMEOUT_MS = 6000;
@@ -483,17 +486,20 @@
       // desenhados antes dele; v1 puramente visual, sem hit-testing/toque
       if (this.pois && this.img) {
         for (const p of this.pois) {
-          // Hipótese H (validada): coord = px2048/SF*2 + 1 com px2048 = 2*X (origem baixo-esquerda)
-          const cx = 4 * p.x / this.SF.x + 1;
-          const cy = 4 * p.y / this.SF.y + 1;
+          // Docs XIVAPI: px do doc = topo-esquerda igual ao nosso (eixo Y medido: marcador X=804 a ~8px do
+          // player em modo direto). Y do doc (FishingSpot-style) é origem INFERIOR -> yImg trata o norte;
+          // mantemos cy direto como no X e o Y_FLIP do pipeline cuida da tela.
+          const cx = p.x * 2 / this.SF.x + 1;
+          const cy = p.y * 2 / this.SF.y + 1;
           const px = this.xImg(cx);
           const py = this.yImg(cy);
           const sx = W / 2 + (px - cx_img) * s_eff;
           const sy = H / 2 + (py - cy_img) * s_eff;
           const kind = POI_AETHERYTE_ICONS.has(p.icon) ? "aetheryte"
-            : (POI_COMMERCE_ICONS.has(p.icon) ? "commerce" : "default");
+            : POI_AETHERNET_ICONS.has(p.icon) ? "aethernet"
+            : POI_DISTRICT_ICONS.has(p.icon) ? "district" : "default";
           // tamanho dinâmico: no zoom 1 o POI é quase o pino do jogador (10px) e cresce com o zoom
-          const base = kind === "aetheryte" ? 9 : (kind === "commerce" ? 8 : 7);
+          const base = kind === "aetheryte" ? 9 : (kind === "aethernet" ? 8 : 7);
           const r = Math.min(28, base * (0.95 + 0.45 * (this.scale - 1)));
           if (sx < -r - 8 || sx > W + r + 8 || sy < -r - 8 || sy > H + r + 8) continue;
           ctx.beginPath();
@@ -505,13 +511,13 @@
             ctx.arc(sx, sy, r, 0, Math.PI * 2);
           }
           ctx.fillStyle = kind === "aetheryte" ? POI_AETHERYTE
-            : (kind === "commerce" ? POI_COMMERCE : POI_DEFAULT);
+            : (kind === "default" ? POI_DEFAULT : POI_COMMERCE);
           ctx.fill();
           ctx.lineWidth = kind === "default" ? 1 : 1.5;
           ctx.strokeStyle = MAP_PIN_STROKE;
           ctx.stroke();
           // rótulo curto apenas com zoom razoável
-          if (kind === "aetheryte" && this.scale >= 1.6 && p.name) {
+          if ((kind === "aetheryte" || kind === "aethernet") && this.scale >= 1.6 && p.name) {
             ctx.fillStyle = POI_AETHERYTE;
             ctx.font = Math.round(9 + 3 * (this.scale - 1)) + "px sans-serif";
             ctx.fillText(p.name.length > 14 ? p.name.slice(0, 13) + "\u2026" : p.name, sx + r + 5, sy + 4);
