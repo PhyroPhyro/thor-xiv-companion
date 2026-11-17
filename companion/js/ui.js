@@ -45,22 +45,6 @@
     $("target-hp-txt").textContent = (t.dead ? "DEAD" : t.hp.toLocaleString() + " / " + t.maxHp.toLocaleString());
   }
 
-  function renderParty(list) {
-    const ul = $("party-list");
-    if (!list || list.length === 0) {
-      ul.innerHTML = '<li class="dim" style="justify-content:center">sem party</li>';
-      return;
-    }
-    ul.innerHTML = list.map((m) => {
-      const p = pct(m.hp, m.maxHp);
-      return '<li class="' + (m.online ? "" : "offline") + '">' +
-        '<span class="jobchip">' + (m.job || "?") + "</span>" +
-        '<span class="pname">' + escapeHtml(m.name) + "</span>" +
-        '<span class="dim">' + m.level + "</span>" +
-        '<div class="bar hp"><i style="width:' + p + '%"></i><b>' + Math.round(p) + "%</b></div>" +
-        "</li>";
-    }).join("");
-  }
 
   function renderChat(list) {
     const box = $("chat-log");
@@ -144,7 +128,6 @@
       $("map-name").textContent = s.map ? s.map.name : "";
       renderPlayer(s.player);
       renderTarget(s.loggedIn ? s.target : null);
-      renderParty(s.party);
       renderChat(s.chat);
     },
     setMode(mode) {

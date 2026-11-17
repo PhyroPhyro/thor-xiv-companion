@@ -11,6 +11,13 @@
   const NAMES = ["Aella Vane", "Brand Ironheart", "Ysilde", "Kororo Tomo", "Zwiebelmann", "Tule mahci"];
   const JOBS = ["WAR", "WHM", "MNK", "DRG", "SCH", "BLM"];
 
+  // IDs reais do ClassJob.RowId: 19 = PLD (Paladin), 27 = SMN (Summoner).
+  // O demo alterna entre os dois a cada ~45s p/ exercitar a troca de hotbar por job.
+  const JOB_PAIRS = [
+    { jobId: 19, job: "PLD", level: 90 },
+    { jobId: 27, job: "SMN", level: 80 },
+  ];
+
   let t0 = null;
   let chat = [];
   let chatSeed = 0;
@@ -48,6 +55,8 @@
     }
 
     const hpPct = 0.62 + 0.3 * Math.abs(Math.sin(t / 2.7));
+    // alterna o job do personagem a cada ~45s (19 PLD <-> 27 SMN) para exercitar a troca de hotbar
+    const job = JOB_PAIRS[Math.floor(t / 45) % JOB_PAIRS.length];
     const state = {
       type: "state",
       ts: now,
@@ -55,7 +64,7 @@
       zone: { id: zone.id, name: zone.name },
       map: { id: zone.mapId, name: zone.name },
       player: {
-        name: "Phyro Axelpin", job: "DRG", level: 100,
+        name: "Phyro Axelpin", jobId: job.jobId, job: job.job, level: job.level,
         hp: Math.floor(hpPct * 432100), maxHp: 432100,
         mp: 9500 + Math.floor(500 * Math.sin(t)), maxMp: 10000,
         world: { x: cx * 10, y: 12, z: cy * 10 },

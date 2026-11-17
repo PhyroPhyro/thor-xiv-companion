@@ -5,8 +5,9 @@
   "use strict";
 
   const $ = (id) => document.getElementById(id);
-  const KEY = "hotbar.v1";
-  const GRID_KEY = "hotbar.grid.v1";
+  const KEY = "hotbar.v1";          // legado v1 (array plano): somente leitura após a migração — não apagar
+  const JOBS_KEY = "hotbar.jobs.v2";// { "<jobId>": {slots:[...12], preset}, "0": {...} }
+  const GRID_KEY = "hotbar.grid.v1";// preset global: default de buckets novos e usado na migração
   const MAX_SLOTS = 12; // maior preset (4x3); slots além do grade atual ficam preservados na memória
   const PRESETS = {
     "3x3": { c: 3, r: 3, label: "3×3", n: 9 },
@@ -17,7 +18,7 @@
   const wrap = $("hotbar-wrap");
   let grid = null; // criado dentro de build(); NUNCA capturar em cima elemento de innerHTML
 
-  let slots = load();
+  let slots = new Array(MAX_SLOTS).fill(null); // slots do bucket em uso agora
   let editMode = false;
   let editIdx = -1;
   let selSkill = null;
@@ -30,8 +31,12 @@
   // cooldown real (M2): último valor renderizado por slot p/ evitar toque desnecessário no DOM
   const cdLast = new Map(); // idx => { pct: number, active: boolean }
 
-  let gridPreset = localStorage.getItem(GRID_KEY);
-  if (!PRESETS[gridPreset]) gridPreset = "4x3";
+  // buckets por job: chave = String(player.jobId) ou "0" (sem login / job indisponível)
+  const buckets = new Map();
+  let currentJobKey = "0"; // chave do bucket em uso agora
+  let gridPreset = "4x3";  // preset do bucket em uso agora
+  let jobsReady = false;   // migração v1 -> v2 já executada (ou nada para migrar)
+  let lastJobKey = null;   // última chave vista (detecta troca de job)
 
   const TOOLTIP_MS = 400; // long-press parado antes de mostrar o tooltip (fora do editMode)
   const DRAG_THRESHOLD = 8; // px de movimento p/ iniciar arraste (só em editMode)
@@ -53,7 +58,68 @@
     while (a.length < MAX_SLOTS) a.push(null);
     return a;
   }
-  function save() { localStorage.setItem(KEY, JSON.stringify(slots)); }
+  // ---------- storage v2 (por job) ----------
+  // Chave do bucket: String(player.jobId) quando houver job de classe real (> 0),
+  // caso contrario "0" (geral: sem login, personagem sem classe ou job indisponível).
+  function jobKeyOf(state) {
+    const p = state && state.player;
+    const jid = p && typeof p.jobId === "number" ? p.jobId : null;
+    return (jid != null && jid > 0) ? String(jid) : "0";
+  }
+  function loadJobs() {
+    try {
+      const o = JSON.parse(localStorage.getItem(JOBS_KEY) || "null");
+      if (o && typeof o === "object" && !Array.isArray(o))
+        return new Map(Object.entries(o));
+    } catch (e) { /* noop */ }
+    return new Map();
+  }
+  function saveJobs() {
+    localStorage.setItem(JOBS_KEY, JSON.stringify(Object.fromEntries(buckets)));
+  }
+  function bucketOf(key) {
+    const b = buckets.get(key);
+    return b && Array.isArray(b.slots) ? b : null;
+  }
+  function defaultPreset() {
+    const g = localStorage.getItem(GRID_KEY);
+    return PRESETS[g] ? g : "4x3";
+  }
+  function enterBucket(key) {
+    // posiciona slots/preset do bucket `key` como estado atual (cria vazio se inexistente)
+    const b = bucketOf(key);
+    if (b) {
+      slots = padToMax(b.slots.slice());
+      gridPreset = b.preset && PRESETS[b.preset] ? b.preset : defaultPreset();
+    } else {
+      slots = new Array(MAX_SLOTS).fill(null);
+      gridPreset = defaultPreset();
+    }
+    buckets.set(key, { slots: padToMax(slots.slice()), preset: gridPreset });
+    currentJobKey = key;
+  }
+  function persistCurrent() {
+    // grava o bucket em uso no disco (chamado antes de trocar de job e a cada edição)
+    buckets.set(currentJobKey, { slots: padToMax(slots.slice()), preset: gridPreset });
+    saveJobs();
+  }
+  function save() {
+    persistCurrent(); // hotbar.v1 agora e read-only (ja foi copiado na migracao)
+  }
+  // migração única: hotbar.v1 (array plano) copia para o bucket do job atual,
+  // ou para "0" quando o jobId ainda nao e conhecido. hotbar.v1 nao e apagado.
+  function migrateV1(state) {
+    if (jobsReady || buckets.size > 0) return;
+    try {
+      const d = JSON.parse(localStorage.getItem(KEY) || "null");
+      if (Array.isArray(d)) {
+        const slotsV1 = padToMax(d.map((s) => s && (s.kind === "command" || s.kind === "skill" || s.kind === "sequence") ? s : null));
+        buckets.set(jobKeyOf(state), { slots: slotsV1, preset: defaultPreset() });
+        saveJobs();
+      }
+    } catch (e) { /* noop */ }
+    jobsReady = true;
+  }
   function gridTotal() { const p = PRESETS[gridPreset]; return p.c * p.r; }
 
   function skillIconUrl(icon) {
@@ -458,14 +524,14 @@
         $("ed-panel-" + k2).classList.toggle("hidden", k2 !== k);
       });
       $("ed-panel-basic").classList.toggle("hidden", k === "skill");
-      if (k === "skill") loadActions(() => renderSkillList($("ed-skillq").value));
+      if (k === "skill") ensureCatalog(currentJobKey, () => renderSkillList($("ed-skillq").value));
     };
     seg.querySelectorAll(".hb-seg-btn").forEach((bt) => bt.onclick = () => setKind(bt.dataset.kind));
     setKind(editKind);
 
     const q = $("ed-skillq");
     q.oninput = () => renderSkillList(q.value);
-    loadActions(() => renderSkillList(q.value));
+    ensureCatalog(currentJobKey, () => renderSkillList(q.value));
 
     const doSave = () => {
       const kind = editKind;
@@ -521,6 +587,7 @@
     el.innerHTML = `
       <div class="hb-pop-head"><span class="panel-title">Ferramentas</span>
         <button class="btn btn-ghost" id="hb-pop-close">Fechar</button></div>
+      <p class="hb-pop-hint" id="hb-pop-job"></p>
       <button id="hb-pop-edit" class="btn hb-pop-btn">${editing ? "✅ Pronto" : "✏️ Editar"}</button>
       <div class="divider"></div>
       <p class="hb-pop-hint dim">Grade</p>
@@ -544,6 +611,13 @@
     });
     $("hb-pop-export").onclick = () => { closeTools(); exportJson(); };
     $("hb-pop-import").onclick = () => { closeTools(); importJson(); };
+
+    // chip discreto do job atual (recria a cada abertura do popover)
+    const st = window.__txState;
+    const p = st && st.player ? st.player : null;
+    const jobEl = $("hb-pop-job");
+    if (jobEl) jobEl.textContent = p && p.job ? esc(p.job + (p.level != null ? " " + p.level : "")) : "sem job";
+
     document.addEventListener("pointerdown", toolsOutside, true);
   }
   function toolsOutside(ev) {
@@ -559,17 +633,21 @@
   }
   function applyPreset(k) {
     gridPreset = k;
-    localStorage.setItem(GRID_KEY, k);
+    buckets.set(currentJobKey, { slots: padToMax(slots.slice()), preset: k });
+    saveJobs();
+    localStorage.setItem(GRID_KEY, k); // default global para buckets novos / migracao
     renderGrid();
     status("grade " + PRESETS[k].label + " (" + PRESETS[k].n + " slots)");
   }
 
   // ---- import/export ----
   function exportJson() {
+    persistCurrent(); // garante o bucket atual no disco antes de exportar
+    const payload = { version: 2, jobs: Object.fromEntries(buckets) };
     const ta = document.createElement("textarea");
-    ta.value = JSON.stringify(slots);
+    ta.value = JSON.stringify(payload, null, 2);
     document.body.appendChild(ta); ta.select();
-    try { document.execCommand("copy"); status("JSON copiado"); } catch (e) { prompt("Copie:", ta.value); }
+    try { document.execCommand("copy"); status("JSON copiado (v2, todos os jobs)"); } catch (e) { prompt("Copie:", ta.value); }
     ta.remove();
   }
   function importJson() {
@@ -577,9 +655,30 @@
     if (!txt) return;
     try {
       const d = JSON.parse(txt);
-      if (!Array.isArray(d)) throw 0;
-      slots = padToMax(d.map((s) => s && (s.kind === "command" || s.kind === "skill" || s.kind === "sequence") ? s : null));
-      save(); renderGrid(); status("importado");
+      let jobs;
+      if (d && d.version === 2 && d.jobs && typeof d.jobs === "object") {
+        // v2: substitui o mapa inteiro de jobs
+        jobs = new Map(Object.entries(d.jobs));
+      } else if (Array.isArray(d)) {
+        // v1 (array plano): so o bucket geral "0"; jobs existentes sao mantidos
+        jobs = new Map(buckets);
+        jobs.set("0", { slots: d, preset: defaultPreset() });
+      } else {
+        throw 0;
+      }
+      // normaliza todos os buckets
+      for (const [k, b] of jobs) {
+        if (!b || !Array.isArray(b.slots)) { jobs.delete(k); continue; }
+        b.slots = padToMax(b.slots.slice(0, MAX_SLOTS)
+          .map((s) => s && (s.kind === "command" || s.kind === "skill" || s.kind === "sequence") ? s : null));
+        if (!b.preset || !PRESETS[b.preset]) b.preset = defaultPreset();
+      }
+      buckets.clear();
+      jobs.forEach((v, k) => buckets.set(k, v));
+      saveJobs();
+      enterBucket(currentJobKey); // reposiciona no bucket do job atual (cria se necessario)
+      renderGrid();
+      status("importado");
     } catch (e) { status("JSON invalido"); }
   }
 
@@ -588,17 +687,54 @@
       .filter((l) => l.length && !l.startsWith("//"));
   }
 
-  // ---- skills do catalogo ----
-  function loadActions(cb) {
-    if (window.__txActions && window.__txActions.length) { cb && cb(); return; }
+  // ---- skills do catalogo (cacheado por job; invalida ao trocar de job) ----
+  let actionsTries = 0;
+  let catalogFetching = false;
+  function catalogCached(key) {
+    return window.__txActionsByJob && window.__txActionsByJob[key]
+      && window.__txActionsByJob[key].length;
+  }
+  function invalidateCatalog() {
+    window.__txActionsByJob = null;
+    window.__txActions = null;
+    actionsTries = 0;
+    catalogFetching = false;
+  }
+  function fetchCatalog(key, cb) {
+    if (catalogFetching) { cb && cb(); return; } // ja ha um voo em andamento
+    const list = $("ed-actions-list");
+    if (list) list.innerHTML = '<div class="dim">carregando skills do job…</div>';
+    catalogFetching = true;
     fetch("/api/actions").then((r) => r.json()).then((d) => {
       const items = d.items || [];
-      if (items.length) { window.__txActions = items; cb && cb(); return; }
-      if (++actionsTries < 4) setTimeout(() => loadActions(cb), 800);
-      else { const l = $("ed-actions-list"); if (l) l.innerHTML = '<div class="dim">catalogo vazio — abra o editor novamente com o jogo em mundo</div>'; }
-    }).catch(() => { if (++actionsTries < 4) setTimeout(() => loadActions(cb), 800); });
+      window.__txActionsByJob = window.__txActionsByJob || {};
+      window.__txActionsByJob[String(key)] = items;
+      window.__txActions = items; // compatibilidade (tooltip / slot atual)
+      catalogFetching = false;
+      actionsTries = 0;
+      cb && cb();
+      renderSkillList($("ed-skillq") ? $("ed-skillq").value : "");
+    }).catch(() => {
+      if (++actionsTries < 4) { setTimeout(() => fetchCatalog(key, cb), 800); return; }
+      catalogFetching = false;
+      const l = $("ed-actions-list");
+      if (l) l.innerHTML = '<div class="dim">catalogo vazio — abra o editor novamente com o jogo em mundo</div>';
+    });
   }
-  let actionsTries = 0;
+  function ensureCatalog(key, cb) {
+    if (catalogCached(key)) { cb && cb(); return; }
+    fetchCatalog(key, cb);
+  }
+  function catalogItem(id) {
+    const map = window.__txActionsByJob;
+    if (map) for (const k in map) {
+      const it = map[k] && map[k].find((a) => a.id == id);
+      if (it) return it;
+    }
+    const cur = window.__txActions;
+    if (Array.isArray(cur)) return cur.find((a) => a.id == id);
+    return null;
+  }
 
   function renderSkillList(filter) {
     const list = $("ed-actions-list");
@@ -734,11 +870,45 @@
   }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 
+  loadJobs().forEach((v, k) => buckets.set(k, v));
+  if (buckets.size === 0) migrateV1(window.__txState); // v1 -> bucket do job atual, ou "0" se ainda desconhecido
+  enterBucket(jobKeyOf(window.__txState)); // posiciona o bucket atual (cria vazio se necessario)
   build();
   setInterval(() => {
     const w = $("hotbar-grid");
     if (w) w.classList.toggle("offline", !(window.__txState && window.__txState.loggedIn));
     const st = window.__txState;
-    if (st) updateCooldowns(st);
+    if (st) {
+      migrateV1(st); // uma vez: hotbar.v1 -> bucket do job atual (ou "0")
+      updateCooldowns(st);
+      const key = jobKeyOf(st);
+      if (key !== currentJobKey) switchJob(key, st);
+    }
   }, 700);
+
+  function switchJob(key, st) {
+    // fecha o bucket que estava em uso
+    persistCurrent();
+    currentJobKey = key;
+    const b = bucketOf(key);
+    if (b) {
+      slots = padToMax(b.slots.slice());
+      gridPreset = b.preset && PRESETS[b.preset] ? b.preset : defaultPreset();
+    } else {
+      slots = new Array(MAX_SLOTS).fill(null);
+      gridPreset = defaultPreset();
+    }
+    buckets.set(currentJobKey, { slots: padToMax(slots.slice()), preset: gridPreset });
+    saveJobs();
+    renderGrid();
+    // catalogo do novo job: invalida o cache local p/ forcar re-fetch ao abrir o editor
+    invalidateCatalog();
+    // toast: so de job conhecido para outro job conhecido (sem spam de login/logout)
+    const prev = lastJobKey;
+    lastJobKey = key;
+    if (prev != null && prev !== "0" && key !== "0" && prev !== key) {
+      const sig = st && st.player ? st.player.job : null;
+      if (sig) status("hotbar: " + esc(sig));
+    }
+  }
 })();

@@ -120,6 +120,7 @@ public sealed class StateCollector
         sb.Append("\"player\":{");
         sb.Append("\"name\":").Append(System.Text.Json.JsonSerializer.Serialize(player.Name.TextValue)).Append(',');
         sb.Append("\"job\":\"").Append(JobAbbrev(player.ClassJob.RowId)).Append("\",");
+        sb.Append("\"jobId\":").Append(player.ClassJob.RowId).Append(',');
         sb.Append("\"level\":").Append(player.Level).Append(',');
         sb.Append("\"hp\":").Append(player.CurrentHp).Append(",\"maxHp\":").Append(player.MaxHp).Append(',');
         sb.Append("\"mp\":").Append(player.CurrentMp).Append(",\"maxMp\":").Append(player.MaxMp).Append(',');

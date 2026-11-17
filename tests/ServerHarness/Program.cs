@@ -37,7 +37,7 @@ static class SampleJson
     {"type":"state","ts":1731700000000,"loggedIn":true,
      "cooldowns":{"1":{"r":2.5,"t":4}},
      "zone":{"id":399,"name":"The Goblet"},"map":{"id":184,"name":"The Goblet"},
-     "player":{"name":"Tester One","job":"DRG","level":100,"hp":300000,"maxHp":432100,"mp":9000,"maxMp":10000,
+     "player":{"name":"Tester One","job":"DRG","jobId":19,"level":100,"hp":300000,"maxHp":432100,"mp":9000,"maxMp":10000,
        "world":{"x":100.2,"y":12.0,"z":200.3},
        "mapCoords":{"x":21.0,"y":21.0}},
      "target":{"name":"Boss","job":"","hp":380000,"maxHp":400000,"dead":false},
