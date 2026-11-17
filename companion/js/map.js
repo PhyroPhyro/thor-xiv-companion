@@ -142,7 +142,7 @@
         cache = JSON.parse(localStorage.getItem(MAP_CACHE_KEY) || "{}");
       } catch (e) { /* localStorage indisponível — segue sem cache */ }
       const hit = cache[zoneId];
-      if (hit && hit.key && hit.sf && hit.sf.x && hit.sf.y)
+      if (hit && hit.key && hit.sf && hit.sf.x && hit.sf.y && hit.rowId)
         return { key: hit.key, index: hit.index || "00", sf: hit.sf, rowId: hit.rowId };
 
       // 2) XIVAPI v2: busca a linha da sheet Map cujo TerritoryType == zone.id
@@ -238,7 +238,8 @@
           if (!r.ok) break;
           data = await r.json();
         } catch (e) {
-          break; // falha silenciosa: sem POIs nesta zona
+          this.jserr("loadPois fetch page falhou: " + (e && e.message ? e.message : e));
+          break; // falha silenciosa na UI, mas logada p/ diagnóstico
         } finally {
           clearTimeout(timer);
         }
@@ -259,6 +260,7 @@
       }
 
       this.pois = pois; // [] quando não há marcadores ou a busca falhou
+      this.jserr("loadPois row=" + mapRowId + " -> " + pois.length + " marcadores");
       try {
         cache[mapRowId] = pois;
         localStorage.setItem(POI_CACHE_KEY, JSON.stringify(cache));
@@ -378,6 +380,20 @@
     }
 
     render(mapCoords) {
+      try {
+        this.renderInner(mapCoords);
+      } catch (e) {
+        this.errCount = (this.errCount || 0) + 1;
+        if (this.errCount <= 5) this.jserr("render #" + this.errCount + ": " + (e && e.stack ? e.stack : e));
+      }
+    }
+
+    jserr(m) {
+      if (window.ThorNative && window.ThorNative.log) { try { window.ThorNative.log("MAP " + m); } catch (e2) { /* noop */ } }
+      if (window.console && console.warn) console.warn("MAP " + m);
+    }
+
+    renderInner(mapCoords) {
       const c = this.canvas, ctx = this.ctx, W = c.width, H = c.height;
       ctx.clearRect(0, 0, W, H);
 

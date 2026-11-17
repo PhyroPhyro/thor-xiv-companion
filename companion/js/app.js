@@ -3,6 +3,15 @@
   "use strict";
 
   const $ = (id) => document.getElementById(id);
+  // canal de erro p/ logcat via ThorNative (APK) — exceções nunca ficam mudas no Thor
+  window.jserr = function (tag, e) {
+    var m = tag + ": " + (e && (e.stack || e.message) ? (e.stack || e.message) : String(e));
+    if (window.ThorNative && window.ThorNative.log) { try { window.ThorNative.log(m); } catch (x) { /* noop */ } }
+    if (window.console && console.warn) console.warn(m);
+  };
+  window.addEventListener("error", function (ev) { window.jserr("window.onerror", ev.error || ev.message); });
+  window.addEventListener("unhandledrejection", function (ev) { window.jserr("unhandledrejection", ev.reason); });
+
 
   const settings = {
     wsUrl: localStorage.getItem("wsUrl") || "",   // vazio = mesma origem

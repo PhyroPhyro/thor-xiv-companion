@@ -241,6 +241,11 @@ public class MainActivity extends Activity {
         }
 
         @android.webkit.JavascriptInterface
+        public void log(String msg) {
+            android.util.Log.i("ThorXivJS", msg);
+        }
+
+        @android.webkit.JavascriptInterface
         public void requestTextFocus() {
             runOnUiThread(() -> {
                 setInputFocusable(true);
