@@ -39,7 +39,7 @@ Ordem sugerida: idioma+temes juntos (rodada leve), depois conexão/backup, resto
 
 ## T3 — Mapa útil
 
-> **Fonte de mapa (decisão 2026-11-17):**xivapi v2 compõe mapas por zona em runtime — `GET https://v2.xivapi.com/api/asset/map/{territoryType}/{subIndex}?format=jpg` (ex.: `s1d1/00`); hotlink encorajado pelo provedor, ~100–300 KB/zona, cache do browser resolve. Assets locais viram opcionais (offline não é meta). Falta o bridge expor `territoryType` numérico (row_id) no estado.
+> **✅ FEITO 0.5.11 (2026-11-17):** fundo da zona via XIVAPI v2 (`/api/search?sheets=Map&fields=Id&query=TerritoryType={id}` → `Id` `s1t1/01` → `/api/asset/map/{key}/{index}?format=jpg`), cache `txmap.v1`, fallback grade + badge. **Fonte de mapa (decisão 2026-11-17):**xivapi v2 compõe mapas por zona em runtime — `GET https://v2.xivapi.com/api/asset/map/{territoryType}/{subIndex}?format=jpg` (ex.: `s1d1/00`); hotlink encorajado pelo provedor, ~100–300 KB/zona, cache do browser resolve. Assets locais viram opcionais (offline não é meta). Falta o bridge expor `territoryType` numérico (row_id) no estado.
 
 - [ ] Mapa por zona: dropar imagens `maps/{mapId}.{png|jpg}` (uso da convenção já criada); opção futura de extrair do próprio jogo
 - [ ] Toque no mapa → abre o mapa grande do jogo com flag (pendente de executor de comando adequado)

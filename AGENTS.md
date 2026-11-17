@@ -66,6 +66,7 @@ README.md e no vault (`4. Projetos/Thor XIV Companion`).
   de espera. Regra: zip = `bin/Release/ThorXivBridge/latest.zip`; após deploy, conferir no PC o
   `AssemblyVersion` do `ThorXivBridge.json` E o tamanho/hash do DLL — hash local que casa com zip velho
   não prova nada.
+- **Delegações Hermes: checar unicode sujo** (0.5.11): o operário escreveu comentários com acentos decompostos (NFD) e soft-hyphen (U+00AD) — invisíveis, mas quebram grep/normalize. Regra: após rodada do Hermes, `python3` scan de `\u00ad \u0301 \u0131` nos js/css/html alterados + NFC normalize.
 - **Re-render = limpar antes de appendChild** (v0.5.6): `renderGrid()` sem `innerHTML = ""`
   acumulava os slots a cada chamada (grid duplicava e "embaralhava" ao alternar Editar/Pronto).
   Regra: toda função de render limpa o contêiner antes de recriar.

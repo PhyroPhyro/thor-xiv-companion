@@ -46,4 +46,5 @@
   --map-pin: #ffcc44;
   --map-pin-stroke: #1c1c1c;
   --map-empty: rgba(216, 227, 243, 0.35);
+  --map-offline: rgba(207, 176, 97, 0.5);
 }

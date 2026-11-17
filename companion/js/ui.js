@@ -27,7 +27,7 @@
 
     if (p.mapCoords) {
       $("coords").textContent = p.mapCoords.x.toFixed(1) + ", " + p.mapCoords.y.toFixed(1);
-      minimap.loadImage(state ? state.map && state.map.id : null);
+      minimap.loadImage(state ? state.zone && state.zone.id : null);
       minimap.render(p.mapCoords);
     } else {
       $("coords").textContent = "--.--, --.--";
