@@ -15,7 +15,7 @@
   };
 
   const wrap = $("hotbar-wrap");
-  const grid = $("hotbar-grid");
+  let grid = null; // criado dentro de build(); NUNCA capturar em cima elemento de innerHTML
 
   let slots = load();
   let editMode = false;
@@ -77,6 +77,7 @@
           <div id="hb-tt-id" class="hb-tt-id"></div>
         </div>
       </div>`;
+    grid = $("hotbar-grid");
     renderGrid();
     $("hb-edit").onclick = () => { editMode = !editMode; $("hb-edit").textContent = editMode ? "Pronto" : "Editar"; closeEditor(); renderGrid(); };
     $("hb-gridbtn").onclick = openConfig;
