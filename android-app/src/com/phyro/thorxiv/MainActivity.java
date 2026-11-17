@@ -7,6 +7,9 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.util.DisplayMetrics;
 import android.view.Display;
+import android.view.KeyEvent;
+import android.view.WindowManager;
+import android.view.inputmethod.InputMethodManager;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -65,6 +68,13 @@ public class MainActivity extends Activity {
                     });
                 }
             }
+
+            @Override
+            public void onPageFinished(WebView v, String url) {
+                // picker precisa de foco de teclado (digita IP); páginas do companheiro não.
+                if (PICKER.equals(url)) setInputFocusable(true);
+                else setInputFocusable(false);
+            }
         });
         web.addJavascriptInterface(new NativeApi(), "ThorNative");
         root.addView(web, new FrameLayout.LayoutParams(-1, -1));
@@ -84,6 +94,7 @@ public class MainActivity extends Activity {
 
     private void loadInitialPicker() {
         web.loadUrl(PICKER);
+        setInputFocusable(true); // picker precisa digitar endereço
         main.postDelayed(() -> {
             if (activeUrl == null) discovery.scan(0);
         }, 300);
@@ -108,12 +119,14 @@ public class MainActivity extends Activity {
     private void showPicker() {
         activeUrl = null;
         web.loadUrl(PICKER);
+        setInputFocusable(true);
     }
 
     private void openEndpoint(String url) {
         activeUrl = url;
         prefs.edit().putString(KEY_LAST, url).apply();
         web.loadUrl(url);
+        setInputFocusable(false); // companheiro não rouba foco do jogo (tela de cima)
         startProbing();
     }
 
@@ -136,6 +149,40 @@ public class MainActivity extends Activity {
     protected void onDestroy() {
         discovery.stop();
         super.onDestroy();
+    }
+
+    /**
+     * Janela da tela de baixo com ou sem foco de input.
+     * true (picker/chat): recebe foco para abrir o IME. false (companheiro): a janela não rouba
+     * foco do jogo na tela de cima; gamepad/teclado seguem para o FFXIV. Touch continua funcionando.
+     */
+    private void setInputFocusable(boolean on) {
+        runOnUiThread(() -> {
+            if (on) {
+                getWindow().clearFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE);
+            } else {
+                getWindow().addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE);
+            }
+        });
+    }
+
+    @Override
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        int source = event.getSource();
+        // SOURCE_KEYBOARD=0x1, SOURCE_JOYSTICK=0x10, SOURCE_GAMEPAD=0x20 (ausentes deste android.jar)
+        boolean fromController = (source & (0x1 | 0x10 | 0x20)) != 0;
+        // KEYCODE_BUTTON_A..Z existem neste jar (BUTTON_T não); gaps entre elas nunca ocorrem de fato
+        boolean isGamepadKey = (keyCode >= KeyEvent.KEYCODE_BUTTON_A && keyCode <= KeyEvent.KEYCODE_BUTTON_Z)
+                || keyCode == KeyEvent.KEYCODE_DPAD_CENTER;
+        boolean isCompanion = activeUrl != null && !PICKER.equals(activeUrl);
+        if (fromController && isGamepadKey
+                && keyCode != KeyEvent.KEYCODE_BACK
+                && keyCode != KeyEvent.KEYCODE_VOLUME_UP
+                && keyCode != KeyEvent.KEYCODE_VOLUME_DOWN
+                && isCompanion) {
+            return true; // consome a tecla: o jogo de cima fica com o controle; UI do Thor opera por touch
+        }
+        return super.onKeyDown(keyCode, event);
     }
 
     /** Objetos expostos ao picker.html. */
@@ -161,6 +208,22 @@ public class MainActivity extends Activity {
             main.post(() -> {
                 activeUrl = "demo";
                 web.loadUrl("file:///android_asset/companion/index.html?demo=1");
+                setInputFocusable(false); // fallback demo também é companheiro
+            });
+        }
+
+        @android.webkit.JavascriptInterface
+        public void requestTextFocus() {
+            runOnUiThread(() -> setInputFocusable(true));
+        }
+
+        @android.webkit.JavascriptInterface
+        public void releaseTextFocus() {
+            runOnUiThread(() -> {
+                // esconde o IME antes de soltar o foco da janela
+                InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                imm.hideSoftInputFromWindow(web.getWindowToken(), 0);
+                setInputFocusable(false);
             });
         }
     }

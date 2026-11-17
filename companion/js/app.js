@@ -103,4 +103,18 @@
 
   renderSettings();
   applyMode();
+
+  // --- foco de teclado do sistema (APK apenas; no navegador window.ThorNative não existe) ---
+  if (window.ThorNative) {
+    window.__txNative = true;
+    function isTextTarget(el) {
+      return el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
+    }
+    document.addEventListener("focusin", function (e) {
+      if (isTextTarget(e.target)) window.ThorNative.requestTextFocus();
+    });
+    document.addEventListener("focusout", function (e) {
+      if (isTextTarget(e.target)) window.ThorNative.releaseTextFocus();
+    });
+  }
 })();
