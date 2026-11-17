@@ -341,39 +341,87 @@ public sealed class StateCollector
 
     private unsafe string BuildPoisArrayJson(ref FFXIVClientStructs.FFXIV.Client.UI.Agent.AgentMap agent)
     {
-        var sb = new System.Text.StringBuilder(4096);
+        var sb = new System.Text.StringBuilder(8192);
         sb.Append('[');
-        var markers = agent.MapMarkers;
-        // MapMarkerCount can lag until the map UI initializes once per zone; scan the
-        // bounded array and rely on IconId==0 to skip empty slots.
-        // Always scan the full bounded array: MapMarkerCount lags/underreports until the map
-        // UI initializes once per zone; IconId==0 filters empty slots reliably.
-        int count = markers.Length;
         int n = 0;
-        for (int i = 0; i < count && n < 600; i++)
+        var seen = new System.Collections.Generic.HashSet<string>();
+        float sf = agent.CurrentMapSizeFactor == 0 ? 100f : agent.CurrentMapSizeFactor;
+        float offX = agent.CurrentOffsetX, offY = agent.CurrentOffsetY;
+
+        AppendPoisFromSpan(sb, agent.MapMarkers, sf, offX, offY, ref n, seen);
+        AppendPoisFromWarpSpan(sb, agent.WarpMarkers, sf, offX, offY, ref n, seen);
+
+        try
         {
-            ref var info = ref markers[i];
-            var m = info.MapMarker;
-            if (m.IconId == 0) continue; // empty slot
-            // X/Y are already px2048 of the map texture (same space as the player pin);
-            // the PWA converts px->coord with the same scale (xImg/yImg), without re-applying the offset.
-            if (m.X < 0 || m.X > 2048 || m.Y < 0 || m.Y > 2048) continue; // off the texture
-            var name = m.Subtext.HasValue ? m.Subtext.ToString() : "";
-            // Convert to GAME coordinates here, where SizeFactor AND the AgentMap offsets are
-            // at hand (MapUtil semantics: Excel offset == -CurrentOffset*): coord = px*2/SF + 1 - 0.02*off.
-            float sfX = agent.CurrentMapSizeFactor == 0 ? 100f : agent.CurrentMapSizeFactor;
-            float sfY = sfX;
-            float cx = m.X * 2f / sfX + 1f - 0.02f * agent.CurrentOffsetX;
-            float cy = m.Y * 2f / sfY + 1f - 0.02f * agent.CurrentOffsetY;
-            if (cx < 0f || cx > 200f || cy < 0f || cy > 200f) continue;
-            if (n++ > 0) sb.Append(',');
-            sb.Append('{')
-              .Append("\"x\":").Append(Fmt(cx)).Append(",\"y\":").Append(Fmt(cy))
-              .Append(",\"icon\":").Append(m.IconId)
-              .Append(",\"name\":").Append(System.Text.Json.JsonSerializer.Serialize(name))
-              .Append('}');
+            ref var evs = ref agent.EventMarkers;
+            int ec = (int)evs.Count;
+            for (int i = 0; i < ec && n < 600; i++)
+            {
+                var m = evs[i];
+                if (m.MapId == 0) continue;
+                if (m.Position.X == 0f && m.Position.Z == 0f) continue;
+                // MapUtil semantics: Excel offsets == -CurrentOffset* (see Dalamud GetMapCoordinates)
+                float cx = 0.02f * offX + 2048f / sf + 0.02f * m.Position.X + 1f;
+                float cy = 0.02f * offY + 2048f / sf + 0.02f * m.Position.Z + 1f;
+                if (cx < 0f || cx > 200f || cy < 0f || cy > 200f) continue;
+                string label = "";
+                try
+                {
+                    if (m.PlaceNameId != 0)
+                        label = _dataManager.GetExcelSheet<Lumina.Excel.Sheets.PlaceName>().GetRowOrDefault(m.PlaceNameId)?.Name.ToString() ?? "";
+                }
+                catch { /* label opcional */ }
+                AddPoi(sb, ref n, seen, cx, cy, m.IconId, label);
+            }
         }
+        catch { /* event markers indisponiveis: fontes 1-2 ainda validas */ }
+
         sb.Append(']');
         return sb.ToString();
+    }
+
+    private static void AppendPoisFromSpan(System.Text.StringBuilder sb,
+        System.Span<FFXIVClientStructs.FFXIV.Client.UI.Agent.MapMarkerInfo> markers,
+        float sf, float offX, float offY, ref int n, System.Collections.Generic.HashSet<string> seen)
+    {
+        for (int i = 0; i < markers.Length && n < 600; i++) // count underreports until map UI inits
+        {
+            var m = markers[i].MapMarker;
+            EmitBaseMarker(sb, ref m, sf, offX, offY, ref n, seen);
+        }
+    }
+
+    private static void AppendPoisFromWarpSpan(System.Text.StringBuilder sb,
+        System.Span<FFXIVClientStructs.FFXIV.Client.UI.Agent.MapMarkerBase> markers,
+        float sf, float offX, float offY, ref int n, System.Collections.Generic.HashSet<string> seen)
+    {
+        for (int i = 0; i < markers.Length && n < 600; i++)
+            EmitBaseMarker(sb, ref markers[i], sf, offX, offY, ref n, seen);
+    }
+
+    private static void EmitBaseMarker(System.Text.StringBuilder sb,
+        ref FFXIVClientStructs.FFXIV.Client.UI.Agent.MapMarkerBase m,
+        float sf, float offX, float offY, ref int n, System.Collections.Generic.HashSet<string> seen)
+    {
+        if (m.IconId == 0) return;
+        float cx = m.X * 2f / sf + 1f - 0.02f * offX;
+        float cy = m.Y * 2f / sf + 1f - 0.02f * offY;
+        if (cx < 0f || cx > 200f || cy < 0f || cy > 200f) return;
+        string name = "";
+        try { if (m.Subtext.HasValue) name = m.Subtext.ToString(); } catch { }
+        AddPoi(sb, ref n, seen, cx, cy, m.IconId, name);
+    }
+
+    private static void AddPoi(System.Text.StringBuilder sb, ref int n,
+        System.Collections.Generic.HashSet<string> seen, float cx, float cy, uint icon, string name)
+    {
+        var key = icon.ToString() + ":" + System.Math.Round(cx, 1) + ":" + System.Math.Round(cy, 1);
+        if (!seen.Add(key)) return;
+        if (n++ > 0) sb.Append(',');
+        sb.Append('{')
+          .Append("\"x\":").Append(Fmt(cx)).Append(",\"y\":").Append(Fmt(cy))
+          .Append(",\"icon\":").Append(icon)
+          .Append(",\"name\":").Append(System.Text.Json.JsonSerializer.Serialize(name ?? ""))
+          .Append('}');
     }
 }
