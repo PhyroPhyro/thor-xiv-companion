@@ -58,6 +58,7 @@ body {
   display: none; height: 100%; overflow-y: auto; background: var(--panel); border: none; border-radius: 0;
 }
 .tab.active { display: block; }
+#tab-hotbar { overflow: hidden; } /* aba da hotbar nunca rola: gesto de drag tem prioridade total */
 
 /* mapa como conteúdo da aba "Mapa" */
 #tab-mapa { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px; }
@@ -133,17 +134,17 @@ body {
 .bar b { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--text); text-shadow: var(--text-shadow); }
 
 /* ---- Hotbar (T2) ---- */
-#hotbar-wrap { padding: 10px; display: flex; flex-direction: column; gap: 10px; height: 100%; box-sizing: border-box; }
-#hotbar-grid { flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(3, 1fr); gap: 12px; }
+#hotbar-wrap { position: relative; padding: 10px; display: flex; flex-direction: column; gap: 10px; height: 100%; box-sizing: border-box; }
+#hotbar-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(3, 1fr); gap: 12px; }
 #hotbar-grid.offline .hb-slot:not(.empty) { opacity: .45; }
 .hb-slot {
   border-radius: var(--radius); border: 2px solid var(--border);
   background: var(--panel-solid); color: var(--text); cursor: pointer;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
   transition: transform .06s, border-color .2s, box-shadow .2s;
-  height: 100%; min-height: 64px;
+  height: 100%; min-height: 0; /* encolhe com a grade; sem min-height fixo */
   text-shadow: var(--text-shadow);
-  /* touch: long-press não vira menu do navegador; scroll continua normal (drag decide no hold) */
+  touch-action: none; /* sem scroll na aba: toque é sempre drag/tap/tooltip do slot */
   -webkit-touch-callout: none;
   -webkit-user-select: none; user-select: none;
 }
@@ -157,20 +158,14 @@ body {
 /* arraste em editMode */
 .hb-slot.dragging { box-shadow: 0 10px 28px var(--shadow); z-index: 15; opacity: .92; }
 .hb-drag-over { border-color: var(--border-inner); box-shadow: 0 0 0 4px var(--text-muted); z-index: 10; }
-.hb-ico-wrap { display: inline-flex; align-items: center; justify-content: center; width: min(74px, 70%); aspect-ratio: 1; }
+.hb-ico-wrap { display: inline-flex; align-items: center; justify-content: center; width: clamp(28px, 8vh, 48px); aspect-ratio: 1; }
 .hb-ico-img { width: 100%; height: 100%; object-fit: contain; border-radius: var(--radius); background: var(--panel); }
 .hb-ico { font-size: 100%; line-height: 1; }
 .hb-ico.fb, .hb-ico-fb { display: none; line-height: 1; }
 .ico-bad .hb-ico-img { display: none; }
 .ico-bad .hb-ico-fb { display: inline-block; }
 .hb-ico.empty { font-size: 26px; color: var(--text-muted); }
-.hb-name { font-size: 11.5px; max-width: 92%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
-.hb-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.hb-tools button { flex: 1; min-width: 0; padding: 10px 16px; min-height: 44px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--panel-solid); color: var(--text); font-size: 14px; cursor: pointer; text-shadow: var(--text-shadow); }
-.hb-tools button:hover { filter: brightness(1.12); }
-.hb-tools button:active { transform: translateY(1px); }
-.hb-tools button:focus-visible { outline: none; box-shadow: var(--focus-glow); }
-#hb-status { font-size: 13px; }
+.hb-name { font-size: clamp(10px, 2.6vh, 11.5px); max-width: 92%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
 
 #hb-editor { position: fixed; inset: 0; background: var(--backdrop); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 12px; }
 #hb-editor .hb-sheet { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); width: min(100%, 560px); max-height: 92vh; overflow-y: auto; display: flex; flex-direction: column; box-shadow: 0 -10px 30px var(--shadow); }
@@ -223,8 +218,46 @@ body {
 .hb-tt-name { font-weight: 700; font-size: 16px; color: var(--text); }
 .hb-tt-desc { margin-top: 6px; font-size: 14px; color: var(--text-muted); line-height: 1.45; word-wrap: break-word; }
 .hb-tt-id { margin-top: 8px; font-size: 12px; font-family: ui-monospace, monospace; color: var(--text-muted); }
-/* popover de configuracao da grade (pequeno, centralizado na tela, anexado ao body) */
-#hb-gridcfg { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 70; width: min(360px, 94vw); max-height: 80vh; overflow-y: auto; background: var(--panel-solid); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 8px 24px var(--shadow); padding: 10px 12px 12px; }
+/* botao de ferramentas (absoluto, canto superior direito da view da hotbar, sem altura de layout) */
+#hb-gear {
+  position: absolute;
+  top: 10px; right: 10px;
+  z-index: 5;
+  width: 44px; height: 44px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--panel-solid);
+  color: var(--text);
+  font-size: 20px;
+  display: grid; place-items: center;
+  cursor: pointer;
+  text-shadow: var(--text-shadow);
+}
+#hb-gear:hover { filter: brightness(1.12); }
+#hb-gear:focus-visible { outline: none; box-shadow: var(--focus-glow); }
+
+/* toast de feedback no rodapé da aba hotbar */
+#hb-toast {
+  position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+  z-index: 6; pointer-events: none;
+  padding: 6px 12px; border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--panel-solid);
+  color: var(--text); font-size: 13px;
+  text-shadow: var(--text-shadow);
+  white-space: nowrap;
+}
+#hb-toast.hidden { display: none !important; }
+
+/* popover de ferramentas (centralizado, anexado ao body) */
+#hb-tools-pop {
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  z-index: 80; width: min(360px, 94vw); max-height: 82vh; overflow-y: auto;
+  background: var(--panel-solid); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: 0 8px 24px var(--shadow); padding: 10px 12px 12px;
+}
+#hb-tools-pop.hidden { display: none !important; }
+.hb-pop-btn { width: 100%; margin: 6px 0; }
 .hb-pop-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
 .hb-pop-hint { font-size: 12px; margin-bottom: 6px; }
 .hb-presets { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }

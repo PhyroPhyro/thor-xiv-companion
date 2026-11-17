@@ -1,4 +1,4 @@
-// Hotbar touch (T2/M1): grid configurável (3x3/4x3/4x4), drag & drop entre slots só em editMode,
+// Hotbar touch (T2/M1): grid 3x3/4x3/4x2, drag & drop entre slots só em editMode,
 // tooltips de slot e execução de comandos/skills/sequências nativas no jogo.
 // POST /api/command aceita APENAS type command|skill|sequence — Telesto foi removido.
 (function () {
@@ -7,11 +7,11 @@
   const $ = (id) => document.getElementById(id);
   const KEY = "hotbar.v1";
   const GRID_KEY = "hotbar.grid.v1";
-  const MAX_SLOTS = 16; // maior preset (4x4); slots além do grade atual ficam preservados na memória
+  const MAX_SLOTS = 12; // maior preset (4x3); slots além do grade atual ficam preservados na memória
   const PRESETS = {
     "3x3": { c: 3, r: 3, label: "3×3", n: 9 },
+    "4x2": { c: 4, r: 2, label: "4×2", n: 8 },
     "4x3": { c: 4, r: 3, label: "4×3", n: 12 },
-    "4x4": { c: 4, r: 4, label: "4×4", n: 16 },
   };
 
   const wrap = $("hotbar-wrap");
@@ -25,15 +25,16 @@
   let ttOpen = false;
   let ttTimer = null;
   let ttSuppressUntil = 0; // bloqueia a ação do toque que fecha o tooltip
+  let toastTimer = null;
 
   let gridPreset = localStorage.getItem(GRID_KEY);
   if (!PRESETS[gridPreset]) gridPreset = "4x3";
 
-  const TOOLTIP_MS = 400; // long-press antes de mostrar o tooltip
+  const TOOLTIP_MS = 400; // long-press parado antes de mostrar o tooltip (fora do editMode)
   const DRAG_THRESHOLD = 8; // px de movimento p/ iniciar arraste (só em editMode)
 
   // Uma interação ativa por vez (press/tooltip/arraste/tap)
-  let pi = null; // {idx, el, s, x, y, armed, tooltipShown, dragging, src, ghost, overEl, timer}
+  let pi = null; // {idx, el, s, x, y, armed, holdArmed, moved, tooltipShown, dragging, src, ghost, overEl, timer, touchId}
 
   function load() {
     try {
@@ -60,13 +61,8 @@
   function build() {
     wrap.innerHTML = `
       <div id="hotbar-grid"></div>
-      <div class="hb-tools">
-        <button id="hb-edit">Editar</button>
-        <button id="hb-gridbtn">Config</button>
-        <button id="hb-export">Exportar</button>
-        <button id="hb-import">Importar</button>
-        <span id="hb-status" class="dim"></span>
-      </div>
+      <button id="hb-gear" type="button" aria-label="Ferramentas da hotbar">⚙️</button>
+      <div id="hb-toast" class="hidden"></div>
       <div id="hb-editor" class="hidden"></div>
       <div id="hb-confirm" class="hidden"></div>
       <div id="hb-tooltip" class="hidden">
@@ -78,10 +74,7 @@
       </div>`;
     grid = $("hotbar-grid");
     renderGrid();
-    $("hb-edit").onclick = () => { editMode = !editMode; $("hb-edit").textContent = editMode ? "Pronto" : "Editar"; closeEditor(); renderGrid(); };
-    $("hb-gridbtn").onclick = openConfig;
-    $("hb-export").onclick = exportJson;
-    $("hb-import").onclick = importJson;
+    $("hb-gear").onclick = openTools;
 
     // reconhecedor global de move/up (segue o dedo mesmo saindo do elemento do slot)
     document.addEventListener("pointermove", onGlobalMove);
@@ -158,9 +151,11 @@
   }
 
   // ---- reconhecedor de press do slot ----
-  // TOUCH (WebView/Thor): touch events — pan imediato = scroll do navegador;
-  // segurar HOLD_DRAG_MS e depois mover = drag (preventDefault a partir do arm);
-  // tap curto = ação. Mouse (desktop): pointer events, drag por movimento.
+  // TOUCH (WebView/Thor): fora do editMode, segurar 400ms parado em slot preenchido -> tooltip.
+  // Em editMode: sem hold/tooltip; mover > DRAG_THRESHOLD em slot preenchido -> beginDrag imediato
+  // (preventDefault nos touchmoves seguintes). Sem editMode e com movimento -> nada (aba sem scroll).
+  // Tap curto sem movimento -> editMode? openEditor : tapSlot (executar).
+  // MOUSE (pointer events): fluxo atual (drag por movimento > 8px em editMode; tooltip com hold fora do editMode).
   const HOLD_DRAG_MS = 250;
   function setupSlot(b, s, i) {
     b.addEventListener("touchstart", (ev) => startTouch(ev, b, s, i), { passive: true });
@@ -179,8 +174,9 @@
     cancelPress();
     pi = makePi(i, b, s, ev.clientX, ev.clientY, false);
     pi.timer = setTimeout(() => {
-      pi.armed = true; pi.timer = null;
-      if (s && !editMode) { showSlotTooltip(s); pi.tooltipShown = true; }
+      if (!pi) return;
+      pi.timer = null;
+      if (s && !editMode) { pi.armed = true; showSlotTooltip(s); pi.tooltipShown = true; }
       else if (editMode && s) pi.el.classList.add("hb-dragging");
     }, TOOLTIP_MS);
   }
@@ -191,12 +187,14 @@
     const t = ev.changedTouches[0];
     pi = makePi(i, b, s, t.clientX, t.clientY, true);
     pi.touchId = t.identifier;
-    pi.timer = setTimeout(() => {
-      if (!pi) return;
-      pi.holdArmed = true; pi.timer = null;
-      if (editMode && pi.s) pi.el.classList.add("hb-dragging"); // levanta o slot; mover = drag
-      else if (pi.s) { showSlotTooltip(pi.s); pi.tooltipShown = true; }
-    }, editMode ? HOLD_DRAG_MS : TOOLTIP_MS);
+    if (!editMode && s) {
+      // so fora do editMode o hold gera tooltip; em editMode nao tem hold nem tooltip
+      pi.timer = setTimeout(() => {
+        if (!pi) return;
+        pi.holdArmed = true; pi.timer = null;
+        showSlotTooltip(pi.s); pi.tooltipShown = true;
+      }, TOOLTIP_MS);
+    }
   }
 
   function cancelPress() {
@@ -223,11 +221,11 @@
       clearTimeout(pi.timer); pi.timer = null;
       pi.armed = false;
       if (editMode && pi.s) beginDrag(ev);
-      else cancelPress(); // fora de editMode ou slot vazio: não há arraste
+      else cancelPress(); // fora de editMode ou slot vazio: nao ha arraste
     }
   }
 
-  // TOUCH: decide scroll vs drag vs tooltip; preventDefault só depois do hold (scroll continua funcionando)
+  // TOUCH: decide drag vs tooltip vs nada; preventDefault só a partir do arraste confirmado
   function onTouchMove(ev) {
     if (!pi || !pi.touch) return;
     const t = touchById(ev.changedTouches, pi.touchId);
@@ -235,9 +233,11 @@
     if (pi.dragging) { ev.preventDefault(); placeGhost(t); updateDragOver(t); return; }
     const dx = Math.abs(t.clientX - pi.x), dy = Math.abs(t.clientY - pi.y);
     if (dx > DRAG_THRESHOLD || dy > DRAG_THRESHOLD) pi.moved = true;
-    if (pi.moved && !pi.holdArmed && !pi.dragging) { cancelPress(); return; } // virou scroll: sem drag/tooltip neste gesto
-    if (pi.holdArmed) { ev.preventDefault(); } // gesto garantido p/ nós: sem scroll daqui pra frente
-    if (pi.moved && pi.holdArmed && editMode && pi.s && !pi.dragging) beginDrag(t);
+    if (pi.moved && !pi.dragging) {
+      if (editMode && pi.s) { ev.preventDefault(); beginDrag(t); } // arraste imediato, sem hold
+      else { cancelPress(); return; } // sem editMode ou slot vazio: nada (aba nao rola)
+    }
+    if (pi.holdArmed) ev.preventDefault(); // tooltip ja mostrado: segura o gesto, sem scroll
   }
   function touchById(list, id) {
     for (let i = 0; i < list.length; i++) if (list[i].identifier === id) return list[i];
@@ -302,8 +302,8 @@
     const p = pi;
     if (p.dragging) { doDrop(); cleanupPress(); return; }
     if (Date.now() < ttSuppressUntil) { cleanupPress(); return; }
-    if (p.tooltipShown) { ttSuppressUntil = Date.now() + 600; cleanupPress(); return; } // tooltip fica aberta; toque não age
-    if (p.moved) { cleanupPress(); return; } // era scroll
+    if (p.tooltipShown) { ttSuppressUntil = Date.now() + 600; cleanupPress(); return; } // tooltip fica aberta; toque nao age
+    if (p.moved) { cleanupPress(); return; } // era scroll / gesto descartado
     clearTimeout(p.timer); p.timer = null;
     tapSlot(p.s, p.idx, p.el);
     cleanupPress();
@@ -338,7 +338,8 @@
 
   // ---- toque curto nos slots (fluxo centralizado) ----
   // ttSuppressUntil ativo -> todo tap ignorado.
-  // Fora disso: editMode -> editor (preenchido ou vazio); fora do editMode -> executa (preenchido) ou dica (vazio).
+  // Fora disso: slot vazio + editMode -> editor; preenchido + editMode -> editor (SEMPRE, sem login);
+  // preenchido fora do editMode -> executa (exige login); vazio fora do editMode -> dica.
   function tapSlot(s, i, b) {
     if (Date.now() < ttSuppressUntil) return; // toque que fechou o tooltip: não executa ação
     blockClick = true; setTimeout(() => blockClick = false, 600);
@@ -347,8 +348,9 @@
       else status("ative Editar p/ configurar");
       return;
     }
+    if (editMode) { openEditor(i); return; } // editMode: editar slot preenchido nunca exige login
     if (!(window.__txState && window.__txState.loggedIn)) { status("entre no jogo primeiro"); return; }
-    if (editMode) openEditor(i); else if (s.confirm) confirmThen(s, () => fire(s, b)); else fire(s, b);
+    if (s.confirm) confirmThen(s, () => fire(s, b)); else fire(s, b);
   }
 
   // ---- confirmação ----
@@ -407,7 +409,7 @@
           </div>
           <div id="ed-panel-sequence" class="hb-panel${editKind !== "sequence" ? " hidden" : ""}">
             <label>Linhas (um /comando por linha; // comentário)
-              <textarea id="ed-seqv" rows="5" placeholder="/ac \"Holy Sheltron\" <1&#10;/ac \"Goring Blade\" <t>">${esc(s.seq || "")}</textarea></label>
+              <textarea id="ed-seqv" rows="5" placeholder="/ac &quot;Holy Sheltron&quot; &lt;1&#10;/ac &quot;Goring Blade&quot; &lt;t&gt;">${esc(s.seq || "")}</textarea></label>
             <label>Delay entre linhas (ms) <input id="ed-delay" type="number" min="50" max="2000" step="50" value="${s.delay || 200}"></label>
           </div>
           <label class="row"><input id="ed-confirm" type="checkbox"${s.confirm ? " checked" : ""}> pedir confirmação antes de executar</label>
@@ -475,20 +477,32 @@
   function kindIcon(s) { return s.icon == null ? (s.kind === "skill" ? "✦" : "") : s.icon; }
   function closeEditor() { editIdx = -1; hideTooltip(); const el = $("hb-editor"); if (el) { el.classList.add("hidden"); el.innerHTML = ""; } }
 
-  // ---- configuracao da grade (popover pequeno, CENTRALIZADO na tela, anexado ao body) ----
-  function openConfig() {
-    let el = $("hb-gridcfg");
+  // ---- popup de ferramentas (único popup: ⚙️) ----
+  // Editar/Pronto, grade (3x3/4x3/4x2), Exportar, Importar. Fecha por toque fora ou botão Fechar.
+  function openTools() {
+    closeEditor();
+    document.removeEventListener("pointerdown", toolsOutside, true);
+    let el = $("hb-tools-pop");
     if (!el) {
       el = document.createElement("div");
-      el.id = "hb-gridcfg";
-      document.body.appendChild(el); // fora do wrap: nenhum ancestral afeta o posicionamento
+      el.id = "hb-tools-pop";
+      document.body.appendChild(el);
     }
+    const editing = editMode;
     el.innerHTML = `
-      <div class="hb-pop-head"><span class="panel-title">Grade</span>
-        <button class="btn btn-ghost" id="cfg-close">Fechar</button></div>
-      <p class="hb-pop-hint dim">Mais slots = botoes menores</p>
-      <div class="hb-presets" id="cfg-presets"></div>`;
-    const cont = $("cfg-presets");
+      <div class="hb-pop-head"><span class="panel-title">Ferramentas</span>
+        <button class="btn btn-ghost" id="hb-pop-close">Fechar</button></div>
+      <button id="hb-pop-edit" class="btn hb-pop-btn">${editing ? "✅ Pronto" : "✏️ Editar"}</button>
+      <div class="divider"></div>
+      <p class="hb-pop-hint dim">Grade</p>
+      <div class="hb-presets" id="hb-pop-presets"></div>
+      <div class="divider"></div>
+      <button id="hb-pop-export" class="btn hb-pop-btn">Exportar</button>
+      <button id="hb-pop-import" class="btn hb-pop-btn">Importar</button>`;
+    el.classList.remove("hidden");
+    $("hb-pop-close").onclick = closeTools;
+    $("hb-pop-edit").onclick = () => { editMode = !editMode; $("hb-pop-edit").textContent = editMode ? "✅ Pronto" : "✏️ Editar"; closeEditor(); renderGrid(); };
+    const cont = $("hb-pop-presets");
     Object.keys(PRESETS).forEach((k) => {
       const pr = PRESETS[k];
       const bt = document.createElement("button");
@@ -496,27 +510,27 @@
       bt.className = "btn hb-preset-btn" + (k === gridPreset ? " sel" : "");
       bt.dataset.preset = k;
       bt.innerHTML = `<span class="hb-preset-big">${pr.label}</span><span class="hb-preset-small">${pr.n} slots</span>`;
-      bt.onclick = () => applyPreset(k);
+      bt.onclick = () => { applyPreset(k); closeTools(); };
       cont.appendChild(bt);
     });
-    el.classList.remove("hidden"); // centralizado via CSS (sem ancoragem JS)
-    $("cfg-close").onclick = closeConfig;
-    document.addEventListener("pointerdown", cfgOutside, true);
+    $("hb-pop-export").onclick = () => { closeTools(); exportJson(); };
+    $("hb-pop-import").onclick = () => { closeTools(); importJson(); };
+    document.addEventListener("pointerdown", toolsOutside, true);
   }
-  function cfgOutside(ev) {
-    const el = $("hb-gridcfg");
+  function toolsOutside(ev) {
+    const el = $("hb-tools-pop");
+    const gear = $("hb-gear");
     if (el && !el.classList.contains("hidden") && !el.contains(ev.target)
-        && ev.target !== $("hb-gridbtn") && !$("hb-gridbtn").contains(ev.target)) closeConfig();
+        && ev.target !== gear && !gear.contains(ev.target)) closeTools();
   }
-  function closeConfig() {
-    const el = $("hb-gridcfg");
+  function closeTools() {
+    const el = $("hb-tools-pop");
     if (el) el.classList.add("hidden");
-    document.removeEventListener("pointerdown", cfgOutside, true);
+    document.removeEventListener("pointerdown", toolsOutside, true);
   }
   function applyPreset(k) {
     gridPreset = k;
     localStorage.setItem(GRID_KEY, k);
-    closeConfig();
     renderGrid();
     status("grade " + PRESETS[k].label + " (" + PRESETS[k].n + " slots)");
   }
@@ -642,8 +656,16 @@
       .catch(() => done(false, "sem conexão com o bridge"));
   }
 
-  function status(t) { const el = $("hb-status"); if (el) el.textContent = t || ""; }
-  function esc(s) { return String(s == null ? "" : s).replace(/[&<>\"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c])); }
+  function status(t) {
+    const el = $("hb-toast");
+    if (!el) return;
+    if (!t) { el.classList.add("hidden"); clearTimeout(toastTimer); toastTimer = null; return; }
+    el.textContent = t;
+    el.classList.remove("hidden");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.classList.add("hidden"); }, 2500);
+  }
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 
   build();
   setInterval(() => {

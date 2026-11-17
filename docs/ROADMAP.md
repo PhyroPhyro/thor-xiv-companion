@@ -22,7 +22,24 @@
 - [ ] **M3**: páginas de hotbar (swipe) — avaliar demanda (grid configurável já atende)
 - Qualidade: `scripts/check-dom.mjs` no smoke; lições no `AGENTS.md`; ciclo = build → smoke → versão → APK → deploy PC → commit
 
+## T10 — Settings (mapeamento futuro, 2026-11-17)
+
+A aba Settings hoje só tem endpoint WS + modo demo. Mapa de opções para as próximas rodadas:
+
+- [ ] **Idioma** (pt-BR / en, depois de/fr/ja) — exige extrair strings da UI p/ um `i18n.js` (chave→texto); default: detectar `navigator.language`
+- [ ] **Color scheme** — temas via `tokens.css` (Midnight Gold default, Claro, Alto contraste, Daltônico p/ barras HP/MP); trocar só os tokens, zero mudança de layout
+- [ ] **Aparência/layout** — escala da UI (root font-size), preset de grade default da hotbar, mostrar/ocultar target no status-bar, densidade dos slots
+- [ ] **Conexão** — host/porta WS (já ✓), descoberta automática (mDNS `_thorxiv._tcp`), reconexão automática, status de latência
+- [ ] **Mapa** — fonte das imagens (online xivapi ✓ default / assets locais opcionais), camadas de pins (aetheryte, FATE, marked spots), zoom inicial
+- [ ] **Chat** — canal default p/ envio (party/linkshell/say), filtro por canal, mensagens rápidas configuráveis
+- [ ] **Notificações** (T8) — vibração ao terminar cooldown, sons on/off, alerta de role/kill em party
+- [ ] **Acessibilidade** — botões maiores (4x2 forçado), reduz movimento (desliga ghost/anim), alto contraste
+- [ ] **Backup** — export/import de TUDO (hotbar+settings) num JSON só; reset de fábrica
+Ordem sugerida: idioma+temes juntos (rodada leve), depois conexão/backup, resto conforme demanda.
+
 ## T3 — Mapa útil
+
+> **Fonte de mapa (decisão 2026-11-17):**xivapi v2 compõe mapas por zona em runtime — `GET https://v2.xivapi.com/api/asset/map/{territoryType}/{subIndex}?format=jpg` (ex.: `s1d1/00`); hotlink encorajado pelo provedor, ~100–300 KB/zona, cache do browser resolve. Assets locais viram opcionais (offline não é meta). Falta o bridge expor `territoryType` numérico (row_id) no estado.
 
 - [ ] Mapa por zona: dropar imagens `maps/{mapId}.{png|jpg}` (uso da convenção já criada); opção futura de extrair do próprio jogo
 - [ ] Toque no mapa → abre o mapa grande do jogo com flag (pendente de executor de comando adequado)
