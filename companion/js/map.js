@@ -544,7 +544,7 @@
           const nm = p.label || p.name ||
             (kind === "aetheryte" ? "Aetheryte" : kind === "aethernet" ? "Aethernet Node" : "");
           if (nm) {
-            const a = Math.min(1, Math.max(0, (this.scale - 1.15) / 1.1));
+            const a = 0.38 + 0.62 * Math.min(1, Math.max(0, (this.scale - 1) / 1.4));
             if (a > 0.04) {
               ctx.save();
               ctx.globalAlpha = a;

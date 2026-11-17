@@ -348,7 +348,19 @@ public sealed class StateCollector
         float sf = agent.CurrentMapSizeFactor == 0 ? 100f : agent.CurrentMapSizeFactor;
         float offX = agent.CurrentOffsetX, offY = agent.CurrentOffsetY;
 
+        // The static MapMarkers array is (re)built by the map UI layer. If our first read for a
+        // zone comes back nearly empty (player never opened the map this session), ask the agent
+        // itself to create them — same call the UI does — then read again.
         AppendPoisFromSpan(sb, agent.MapMarkers, sf, offX, offY, ref n, seen);
+        if (n < 3)
+        {
+            try
+            {
+                agent.CreateMapMarkers(false);
+                AppendPoisFromSpan(sb, agent.MapMarkers, sf, offX, offY, ref n, seen);
+            }
+            catch { /* keep what we already had */ }
+        }
         AppendPoisFromWarpSpan(sb, agent.WarpMarkers, sf, offX, offY, ref n, seen);
 
         try
@@ -369,6 +381,8 @@ public sealed class StateCollector
                 {
                     if (m.PlaceNameId != 0)
                         label = _dataManager.GetExcelSheet<Lumina.Excel.Sheets.PlaceName>().GetRowOrDefault(m.PlaceNameId)?.Name.ToString() ?? "";
+                    if (string.IsNullOrEmpty(label) && m.TooltipString != null && m.TooltipString->StringLength > 0)
+                        label = m.TooltipString->ToString();
                 }
                 catch { /* label opcional */ }
                 AddPoi(sb, ref n, seen, cx, cy, m.IconId, label);
