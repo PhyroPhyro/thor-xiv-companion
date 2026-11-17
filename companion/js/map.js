@@ -45,6 +45,9 @@
       this.cx = 50;            // centro do viewport
       this.cy = 50;
       this.follow = true;      // recentra no player a cada coords novo (desligado pelo ◎ ou arraste/zoom manual)
+      this.autoFrame = true;   // enquadra a área onde o player anda (média + spread do buffer); off em pan/zoom manual
+      this.buf = [];           // últimas coords da zona
+      this.lastPos = null;
 
       this.bindHUD();
       this.bindInput();
@@ -78,6 +81,9 @@
       this.pendingZoneId = zoneId;
       this.scale = ZOOM_MIN;
       this.follow = true;
+      this.autoFrame = true;
+      this.buf = [];
+      this.lastPos = null;
       await this.resolveAndLoad(zoneId);
       this.loading = false;
     }
@@ -218,28 +224,32 @@
     }
 
     zoomIn() {
+      this.autoFrame = false;
       this.setScale(this.scale * ZOOM_STEP, this.canvas.width / 2, this.canvas.height / 2);
     }
 
     zoomOut() {
+      this.autoFrame = false;
       this.setScale(this.scale / ZOOM_STEP, this.canvas.width / 2, this.canvas.height / 2);
     }
 
     toggleFollow() {
-      this.follow = !this.follow;
+      this.follow = true;
+      this.autoFrame = true;
+      this.buf = [];
       this.syncFollowBtn();
     }
 
     syncFollowBtn() {
       const b = $("map-follow");
       if (!b) return;
-      b.textContent = this.follow ? "◎" : "◇";
-      b.title = this.follow ? "Seguir jogador (desligar)" : "Seguir jogador (ligar)";
+      b.textContent = "◎";
+      b.title = "Re-enquadrar área de movimento (auto)";
     }
 
     // Arrasta o viewport (dx,dy em px de tela). Desliga o follow: o usuário assumiu o centro.
     pan(dx, dy) {
-      this.follow = false;
+      this.follow = false; this.autoFrame = false;
       const c = this.canvas;
       const iw = this.imgW, ih = this.imgH;
       const fit = this.img ? Math.min(c.width / iw, c.height / ih) : Math.min(c.width / iw, c.height / ih);
@@ -258,10 +268,27 @@
       const fit = this.img ? Math.min(W / iw, H / ih) : Math.min(W / iw, H / ih);
       const s_eff = this.scale * fit;
 
-      // follow ON: toda atualização de coords reposiciona o centro (segue em tempo real)
-      if (this.follow && mapCoords) {
-        this.cx = mapCoords.x;
-        this.cy = mapCoords.y;
+      // auto-enquadramento: viewport sobre a área percorrida (mapa parado, pino visivelmente móvel)
+      if (mapCoords) {
+        const pt = { x: mapCoords.x, y: mapCoords.y };
+        if (this.lastPos && Math.abs(pt.x - this.lastPos.x) + Math.abs(pt.y - this.lastPos.y) > 25) this.buf = []; // teleporte
+        this.lastPos = pt;
+        this.buf.push(pt);
+        if (this.buf.length > 90) this.buf.shift();
+        if (this.autoFrame && this.buf.length >= 4) {
+          let mx = 0, my = 0;
+          for (const b of this.buf) { mx += b.x; my += b.y; }
+          mx /= this.buf.length; my /= this.buf.length;
+          let dev = 0;
+          for (const b of this.buf) dev = Math.max(dev, Math.abs(b.x - mx), Math.abs(b.y - my));
+          const target = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, 40 / Math.max(dev, 3)));
+          this.scale += (target - this.scale) * 0.08;
+          this.cx += (mx - this.cx) * 0.15;
+          this.cy += (my - this.cy) * 0.15;
+        } else if (this.follow) {
+          this.cx = mapCoords.x;
+          this.cy = mapCoords.y;
+        }
       }
       this.clamp();
 
@@ -308,15 +335,6 @@
         }
       }
       ctx.textAlign = "start";
-
-      // readout discreto dos coords que alimentam o pino (permite ver que o dado chega/mexe)
-      if (mapCoords) {
-        ctx.fillStyle = MAP_LABEL;
-        ctx.font = "11px sans-serif";
-        ctx.textAlign = "start";
-        ctx.textBaseline = "top";
-        ctx.fillText(mapCoords.x.toFixed(1) + ", " + mapCoords.y.toFixed(1), 8, 6);
-      }
 
       // pino do player: coordenadas reais, nunca somado (fica na tela por causa do clamp do centro)
       if (mapCoords) {
@@ -384,7 +402,7 @@
           panX = e.touches[0].clientX;
           panY = e.touches[0].clientY;
         }
-        this.follow = false;
+        this.follow = false; this.autoFrame = false;
         e.preventDefault();
       }, { passive: false });
 
@@ -409,7 +427,7 @@
         if (e.button !== 0) return;
         panX = e.clientX;
         panY = e.clientY;
-        this.follow = false;
+        this.follow = false; this.autoFrame = false;
       });
       c.addEventListener("mousemove", (e) => {
         if (panX == null) return;

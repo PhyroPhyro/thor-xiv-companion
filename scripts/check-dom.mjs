@@ -58,10 +58,10 @@ for (const r of refs) {
 // 4) aba .tab com display por ID fora do estado .active vazaria em todas as abas (bug duplo: #tab-chat 0.5.10, #tab-mapa 0.5.13)
 {
   const css = readFileSync(join(dir, "css", "app.css"), "utf8");
-  for (const m of css.matchAll(/#(tab-[a-z]+)([^{,]*)\s*\{([^}]*)\}/g)) {
-    const [, id, sel, body] = m;
-    if (/display:\s*(?!none)/.test(body) && !sel.includes(".active"))
-      fail(`css: #${id}${sel} define display sem .active — aba vazaria por baixo de todas`);
+  for (const m of css.matchAll(/#(tab-[a-z]+)((\.active)?)([^{,]*)\s*\{([^}]*)\}/g)) {
+    const [, id, , active, rest, body] = m;
+    if (rest.trim() === "" && !active && /display:\s*(?!none)/.test(body))
+      fail(`css: #${id} define display sem .active — aba vazaria por baixo de todas`);
   }
 }
 
