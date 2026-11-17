@@ -699,13 +699,24 @@
     window.__txActions = null;
     actionsTries = 0;
     catalogFetching = false;
+    staleTries = 0;
   }
+  let staleTries = 0;
   function fetchCatalog(key, cb) {
     if (catalogFetching) { cb && cb(); return; } // ja ha um voo em andamento
     const list = $("ed-actions-list");
     if (list) list.innerHTML = '<div class="dim">carregando skills do job…</div>';
     catalogFetching = true;
     fetch("/api/actions").then((r) => r.json()).then((d) => {
+      // o bridge reconstrói o catalogo no frame SEGUINTE ao pedido: logo apos trocar de job a
+      // resposta pode ser o catalogo do job ANTERIOR. Comparar d.job com o jobId atual.
+      const want = window.__txState && window.__txState.player ? window.__txState.player.jobId : null;
+      if (want != null && d.job != null && String(d.job) !== String(want) && staleTries < 5) {
+        staleTries++;
+        setTimeout(() => { catalogFetching = false; fetchCatalog(key, cb); }, 700);
+        return;
+      }
+      staleTries = 0;
       const items = d.items || [];
       window.__txActionsByJob = window.__txActionsByJob || {};
       window.__txActionsByJob[String(key)] = items;

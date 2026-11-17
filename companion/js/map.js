@@ -309,6 +309,15 @@
       }
       ctx.textAlign = "start";
 
+      // readout discreto dos coords que alimentam o pino (permite ver que o dado chega/mexe)
+      if (mapCoords) {
+        ctx.fillStyle = MAP_LABEL;
+        ctx.font = "11px sans-serif";
+        ctx.textAlign = "start";
+        ctx.textBaseline = "top";
+        ctx.fillText(mapCoords.x.toFixed(1) + ", " + mapCoords.y.toFixed(1), 8, 6);
+      }
+
       // pino do player: coordenadas reais, nunca somado (fica na tela por causa do clamp do centro)
       if (mapCoords) {
         const px = (mapCoords.x / 100) * iw;
