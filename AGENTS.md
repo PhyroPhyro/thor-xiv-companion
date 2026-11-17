@@ -1,106 +1,64 @@
 # AGENTS.md — Thor XIV Companion
 
-> Guia operacional para agentes de IA (opencode/Hermes) trabalhando neste repo.
+> Operational guide for AI agents (opencode/Hermes) working in this repo.
 
-## Visão geral
+## Overview
 
-Companion de FFXIV para a segunda tela do **AYN Thor** (touch, exclusivamente online):
-plugin Dalamud (`dalamud-plugin/ThorXivBridge/`) no PC + PWA (`companion/`) na tela inferior
-do Thor (WebView no APK `android-app/` ou navegador). Detalhes de arquitetura/roadmap no
-README.md e no vault (`4. Projetos/Thor XIV Companion`).
+FFXIV companion for the **AYN Thor's second screen** (touch, online-only): a Dalamud plugin (`dalamud-plugin/ThorXivBridge/`) on the PC + a PWA (`companion/`) on the lower screen (WebView via `android-app/` or browser). Architecture/roadmap details: README.md, `docs/ROADMAP.md` and the maintainer's vault.
 
-## Ciclo de trabalho (OBRIGATÓRIO em toda rodada de código)
+**Language policy (2026-11-17): English is the default** for docs, code comments, commit messages and release notes. pt-BR may come back as an extra later.
 
-1. Fazer as alterações.
-2. Build: `DALAMUD_HOME=/root/.xlcore/dalamud/Hooks/dev dotnet build dalamud-plugin/ThorXivBridge -c Release` → 0 erros.
-3. Smoke: `dotnet build tests/ServerHarness -c Release` + harness + `node scripts/smoke.mjs <porta> <dir-pwa>` → SMOKE PASSOU
-3b. (Thor conectado ao PC) `scripts/deploy-pc.sh <zip> <apk>` instala no Thor via adb E valida (abre o app, `THOR-OK` = vivo sem crash). Mudança só de APK: `scripts/deploy-thor.sh <apk>` (plugin inalterado dispensa zip; bump só no APK)
-   (o smoke inclui `scripts/check-dom.mjs`: ids únicos, referências válidas e nenhuma captura
-   top-level de id criado dinamicamente — o smoke NÃO executa JS da PWA, o check-dom cobre isso).
-4. Bump de versão no csproj (breaking → minor; fix → patch) e gerar `dist/ThorXivBridge-<v>.zip`.
-5. APK quando a PWA mudar: `APK_VERSION_NAME=<v-apk> scripts/build-apk.sh`.
-6. **Deploy no PC**: `scripts/deploy-pc.sh dist/ThorXivBridge-<v>.zip` — hashes SHA256 (PC × local)
-   iguais; se `LOCKED`, pedir para fechar o FFXIV e reexecutar (nunca contornar).
-7. **Commit**: `git commit` com mensagem descritiva (padrão: `<versão>: resumo`).
-8. Registrar no vault (Status/Logs do projeto) quando o ambiente/PC mudar.
+## Working cycle (MANDATORY every code round)
 
-## Identidade visual (inspirada em UI de MMO de fantasia, estilo FFXIV)
+1. Make the changes.
+2. Build: `DALAMUD_HOME=/root/.xlcore/dalamud/Hooks/dev dotnet build dalamud-plugin/ThorXivBridge -c Release` → 0 errors.
+3. Smoke: `dotnet build tests/ServerHarness -c Release` + harness + `node scripts/smoke.mjs <port> <pwa-dir>` → SMOKE PASS
+   3b. (Thor connected to the PC) `scripts/deploy-pc.sh <zip> <apk>` also installs on the Thor via adb AND verifies (opens the app, `THOR-OK` = alive, resumed-on-lower-display, no crash). APK-only change: `scripts/deploy-thor.sh <apk>`.
+   (smoke runs `scripts/check-dom.mjs`: unique ids, valid references, no top-level capture of dynamically-created ids, no `#tab-* { display }` outside `.active`.)
+4. Bump the csproj version (fix → patch, feature → minor) and ship `dist/ThorXivBridge-<v>.zip` from `bin/Release/ThorXivBridge/latest.zip`.
+5. APK whenever the PWA changed: `APK_VERSION_NAME=<v> APK_VERSION_CODE=<n> scripts/build-apk.sh`.
+6. **Deploy to the PC**: `scripts/deploy-pc.sh` — SHA256 must match local; `LOCKED` means close the game first (never work around it). Verify the PC-side `ThorXivBridge.json` `AssemblyVersion`.
+7. **Commit**: one commit per round (`<version>: summary`). Remote `origin` = private GitHub repo; **push** after committing.
+8. **GitHub Release**: `gh release create v<version> dist/ThorXivBridge-<v>.zip dist/thorxiv-companion-<v>.apk` (binary distribution lives in Releases, not in the tree).
+9. **Vault bookkeeping** (maintainer's private Obsidian repo, edited over SSH): update `4. Projetos/Thor XIV Companion/Estado/Status.md` (+ Roadmap/Logs when relevant), then **commit and push only the files under that project folder**, one commit per round. Never touch other vault paths; never include secrets, IPs or credentials in vault notes.
 
-- Todo estilo vem de `companion/css/tokens.css`. **Proibido hex ou cor inline** (hex/rgb/named) fora do tokens.
-- Janela/painel: fundo `--panel`, borda `1px --border` + linha interna `--border-inner`, raio `--radius`.
-- Título de janela: `--font-title`, caixa alta pequena, cor `--gold`, linha fina dourada embaixo.
-- Texto: sempre `--text` com `--text-shadow`. Secundário em `--text-muted`.
-- Botão: fundo `--panel-solid`, borda `--border`; foco/ativo usa `--focus-glow`. Sem cor de fundo chamativa.
-- Item de lista selecionado: fundo `--select-gradient` (esquerda para direita), texto `--gold-bright`.
-- Divisor: linha de 1px com gradiente que esmaece nas duas pontas.
-- Dourado só em título, seleção e foco; no máximo 1 destaque por área.
-- Sem gradientes coloridos, sem sombras grandes, sem cantos muito arredondados.
-- Todo elemento interativo precisa de estado de foco visível (navegação por gamepad).
-- Componentes reutilizáveis em `companion/css/components/` (`panel.css` → `.panel`, `button.css` → `.btn` + variantes). Telas novas reaproveitam esses componentes em vez de recriar estilos.
+## Visual identity (fantasy-MMORPG UI, FFXIV-flavored)
 
-## Convenções
+- All styling comes from `companion/css/tokens.css`. **No hex or inline colors** outside tokens.
+- Window/panel: `--panel` background, `--border` + inner `--border-inner`, `--radius`.
+- Titles: `--font-title`, small caps, `--gold`, thin gold rule below.
+- Text: always `--text` with `--text-shadow`; secondary in `--text-muted`.
+- Button: `--panel-solid` background, `--border`; focus/active uses `--focus-glow`.
+- Selected list item: `--select-gradient` (left→right), `--gold-bright` text.
+- Divider: 1px gradient fading at both ends.
+- Gold only for titles/selection/focus; at most one highlight per area.
+- No color gradients, no big shadows, no overly round corners.
+- Every interactive element needs a visible focus state.
+- Reusable components in `companion/css/components/` (`panel.css` → `.panel`, `button.css` → `.btn` + variants). New screens reuse them instead of reinventing.
 
-- PWA: JS vanilla sem build step; IDs de elementos são contratos com `js/ui.js`/`js/app.js` — mover DOM mantendo IDs.
-- Touch-first: alvos ≥44px; long-press = tooltip; nada depende de hover no Thor.
-- Estado da hotbar: `localStorage` (`hotbar.v1` slots, `hotbar.grid.v1` preset). Export/import JSON mantém todos os slots (inclusive além do preset ativo).
-- Segurança: nada de port-forward; bridge LAN-only; sem automação reativa no jogo.
+## Conventions
 
-## Lições (erros que não se repetem)
+- PWA: vanilla JS, no build step; element IDs are contracts across js modules — move DOM keeping ids.
+- Touch-first: targets ≥44px; long-press = tooltip; nothing depends on hover.
+- Hotbar state: `localStorage` — buckets per job in `hotbar.jobs.v2` (legacy read-only `hotbar.v1`), presets `2x2/3x3/4x4`, split state `split.v1`, caches `txmap.v1`/`txpoi.v1`. Export/import JSON covers all jobs.
+- Security: no port-forwarding; bridge LAN-only; no reactive automation in game, ever.
 
-- **IDs únicos, sempre** (v0.5.3): botão e contêiner de overlay compartilharam o id `hb-config`;
-  `$("id")` pega o primeiro, e o CSS do overlay (`position:fixed; inset:0`) se aplicou ao botão,
-  virando um overlay full-screen inutilizável. Antes de commitar: `grep -c 'id="X"'` — cada id
-  deve aparecer exatamente uma vez no HTML gerado; conferir todo par botão↔contêiner criado.
-- **Elemento de innerHTML não existe na carga do script** (v0.5.5): `const grid = $("hotbar-grid")`
-  no topo do IIFE capturou `null` (o elemento nasce em `build()`), `renderGrid()` estourou antes
-  de ligar handlers → hotbar vazia e botões mortos por 3 versões (o overlay full-screen do Config
-  escondia o problema). Regra: referenciar `$(...)` no momento do uso ou atribuir após o innerHTML;
-  nunca capturar em escopo de carga um id que só nasce em template.
-- **WebView Android: scroll × drag** (v0.5.7): `touch-action: none` nos slots matou o scroll da aba
-  inteira, e pointer events perdem a corrida pro scroll (pointercancel antes do threshold → drag nunca
-  começava). Regra: em lista rolável NUNCA `touch-action:none` no item; usar touch events com
-  `touchmove passive:false` e padrão hold-then-drag — pan imediato deixa o browser rolar; segurar ~250ms
-  → `preventDefault` dali em diante → mover = drag; mover antes do arm = cancelar gesto próprio.
-- **Geometria de mapa FFXIV é oficial, não intuição** (0.5.18): `coord = px/SF*2 + 1` sobre a textura
-  2048 (xivapi/ffxiv-datamining MapCoordinates.md). SizeFactor da linha Map define o SPAN de coords da
-  zona (cidades: SF 200–400 → coords 1..21/1..11; campo: SF 100 → 1..42) — por isso coordenada "8,8"
-  em Idyllshire é centro-oeste, não canto. px=(coord−1)·SF/2; y invertido (norte topo). Ao resolver a
-  linha Map via search, PREFERIR Id terminado em "/00" (linha principal; /01+ são recortes com SF
-  diferente). Nunca reinventar a fórmula: consultar o doc/código XIVMap/XIVApp.
-- **AYN Thor: a tela de baixo é do vendor** (0.4.19): `rip.moth.cocoonshell/.ExternalDisplayActivity`
-  segura o display de apresentação (id 4); activity nossa aberta na tela de CIMA é morta por ele em
-  ~4s (o "pisca instantâneo" nunca foi crash de onCreate — foi kill do vendor + RejectedExecution no
-  probe com executor encerrado). `startActivity(launchDisplayId)` pelo app é negado silenciosamente.
-  Caminho único confiável para abrir na tela de baixo: `adb shell am start --display <id>` (shell tem
-  a permissão; o app, não).
-- **PowerShell: `Write-Output` dentro de function vira o RETORNO dela** (deploy-thor.sh): os logs do Probe
-  eram capturados em `$ok` (array) e as asserções viravam truthy silencioso — falso verde. Regra: functions
-  de teste acumulam logs em `$global:LOG` e retornam BOOL puro; imprime-se o log depois da chamada.
-- **Cocoon com sessão de jogo ativa retém `topResumedActivity` das displays**: o companion fica PAUSED por
-  lifecycle (visível e interativo) e isso é NORMAL — assert de sucesso = `Displayed` + jogo seguiu resumed
-  (comparar lista de activities resumed antes/depois do launch) + crash limpo; `topResumed=thorxiv` é só WARN.
-- **Janela do app no Thor nunca nasce focável** (0.4.20): launcher de app no Android dá window focus ao
-  activity; com jogo streaming, isso empurrava o jogo p/ background. Picker também usa handshake ThorNative
-  (focusin/focusout) para IME sob demanda.
-- **Verificação de app no Thor não pode ser `pidof`** (falso positivo clássico): o deploy-thor.sh exige
-  `Displayed com.phyro.thorxiv` no ActivityTaskManager + `topResumedActivity=.*thorxiv` + crash buffer
-  limpo; mudança de comportamento do app = reexecutar `bash scripts/deploy-thor.sh <apk>` e ler os PROBEs.
-- **Zip do plugin: sempre do output real do build** (v0.5.7): existiam DOIS `latest.zip` — o velho
-  `bin/Release/latest.zip` (congelado no 0.5.1) e o correto `bin/Release/ThorXivBridge/latest.zip`
-  (gerado a cada build). Copiei o velho 5 rodadas seguidas; o PC rodava 0.5.1 com DLL nova só no disco
-  de espera. Regra: zip = `bin/Release/ThorXivBridge/latest.zip`; após deploy, conferir no PC o
-  `AssemblyVersion` do `ThorXivBridge.json` E o tamanho/hash do DLL — hash local que casa com zip velho
-  não prova nada.
-- **Delegações Hermes: checar unicode sujo** (0.5.11): o operário escreveu comentários com acentos decompostos (NFD) e soft-hyphen (U+00AD) — invisíveis, mas quebram grep/normalize. Regra: após rodada do Hermes, `python3` scan de `\u00ad \u0301 \u0131` nos js/css/html alterados + NFC normalize.
-- **MainActivity relocate() → finish() com campos não inicializados** (0.4.17): `relocateToSecondScreen()` dá `return` cedo na tela de cima; `onDestroy` rodava `discovery.stop()` com `discovery` null → crash em loop ao abrir o app. Regra: ciclo de vida de Activity nunca assume estado criado (null-guard em onDestroy); e TODO deploy no Thor passa por `deploy-thor.sh`, que agora instala, ABRE o app e só sai `THOR-OK` se o processo segue vivo sem stack no buffer de crash (abrir via adb cai na tela de cima e relocate é o caminho crítico de teste real).
-- **Re-render = limpar antes de appendChild** (v0.5.6): `renderGrid()` sem `innerHTML = ""`
-  acumulava os slots a cada chamada (grid duplicava e "embaralhava" ao alternar Editar/Pronto).
-  Regra: toda função de render limpa o contêiner antes de recriar.
-- **WebView: gesto é seu ou do navegador** (v0.5.6): long-press em slot abria o menu de contexto
-  do WebView e o scroll roubava o pointer (pointercancel) — drag/long-press morriam. Regra:
-  em elementos com drag/long-press, aplicar `touch-action: none`, `-webkit-touch-callout: none`,
-  `user-select: none`, `contextmenu` com preventDefault e `pointer-events: none` nas `<img>`.
-- **Overlay = menor forma possível** (v0.5.3): nada de modal full-screen para conteúdo pequeno
-  (menu de opções, presets). Usar popover ancorado no gatilho (`position:fixed` alinhado ao
-  `getBoundingClientRect()` do botão), com fechamento por toque fora dele + botão Fechar. Modal
-  com backdrop só quando o conteúdo for grande (ex.: editor de slot).
+## Lessons (mistakes that don't repeat)
+
+- **Unique IDs, always** (v0.5.3): a button and its overlay shared `hb-config`; `$("id")` grabbed the first, the overlay CSS (`position:fixed; inset:0`) applied to the button → full-screen garbage. Before committing: each id exactly once in generated HTML (check-dom enforces).
+- **innerHTML elements don't exist at script load** (v0.5.5): `const grid = $("hotbar-grid")` captured `null` (born in `build()`) → empty hotbar hidden behind another bug. Reference ids at use-time, never top-level for dynamic ids (check-dom enforces).
+- **WebView scroll × drag** (v0.5.7): `touch-action:none` killed page scrolling and pointer events lose the race to scroll (pointercancel before threshold). Use touch events (`touchmove passive:false`); never `touch-action:none` in a scrollable list. Since the hotbar tab became scroll-free, jitter-aware slop (16px) + hold patterns replaced it — see next.
+- **Touch slop is not mouse slop** (0.5.12): 8px is below capacitive finger jitter — every tap became a cancelled drag/killed tooltip. 16px slop + "small drag = tap" safety net at touchend.
+- **Map geometry is official, not intuition** (0.5.18/0.5.25): `coord = px/SF*2 + 1` on the 2048 texture (xivapi-datamining MapCoordinates.md); Map.SizeFactor sets the coord SPAN per zone (cities 200–400 → tiny ranges — "8.8" in Idyllshire is mid-town, not a corner). MapMarker raw X/Y are already px2048 (verified live against the player position, 8px apart). Verify with XIVMap/XIVApp sources before inventing.
+- **AYN Thor: the lower display belongs to the vendor** (0.4.19): `rip.moth.cocoonshell/.ExternalDisplayActivity` owns the presentation display; activities we start on the upper display get killed in ~4s ("instant flash"), and in-app `startActivity(launchDisplayId)` is silently denied. Only reliable path to the lower screen: `adb shell am start --display <id>`.
+- **`Write-Output` inside a PowerShell function becomes its return value** (deploy-thor.sh): logs captured into `$ok` turned assertions into silent truthy — false green. Test functions log into a global array and return a pure bool.
+- **Cocoon keeps `topResumedActivity` while a game session runs**: our activity is lifecycle-PAUSED yet visible/interactive — normal. Success asserts: `Displayed` + game activities still resumed (before/after lists) + clean crash buffer; `topResumed=thorxiv` is only a WARN.
+- **Never start the window focusable** (0.4.20): window focus steals foreground from the streamed game. `FLAG_NOT_FOCUSABLE` always, temporary focus only around text inputs via `ThorNative.requestTextFocus/releaseTextFocus` (picker included).
+- **Verify apps by opening them, not by `pidof`** (0.4.17): deploy-thor.sh installs, clears logcat, opens the app on the lower display and requires Displayed + no crash stack; JS errors go to logcat through `ThorNative.log` (window.onerror/rejections wired in app.js).
+- **Plugin zip comes from the real build output** (v0.5.7): `bin/Release/latest.zip` once lingered stale while the SDK wrote `bin/Release/ThorXivBridge/latest.zip` — we shipped 0.5.1 for five rounds. Zip = the inner one; after deploy verify the PC manifest `AssemblyVersion` and DLL hash.
+- **Hermes delegations: scan for dirty unicode** (0.5.11): the worker once wrote NFD accents and soft-hyphens into comments. After every Hermes round: scan `\u00ad \u0301 \u0131` in touched files + NFC-normalize.
+- **Activity lifecycle: never assume initialized fields** (0.4.17): early `return` before init + `finish()` → onDestroy NPE loop. Null-guard lifecycle hooks; pending runnables must be removed on destroy (`removeCallbacksAndMessages`).
+- **Re-render = clear before appendChild** (v0.5.6).
+- **WebView gestures: yours or the browser's** (v0.5.6): `touch-action:none` only where the page provably cannot scroll; `-webkit-touch-callout/user-select: none`; preventDefault `contextmenu`; `pointer-events:none` on slot `<img>`.
+- **Overlays: smallest shape possible** (v0.5.3): popovers anchored/minimal, never full-screen modals for tiny content. Modals only for big content (the slot editor).
+- **Stale caches poison new features** (0.5.23): `txmap.v1` entries written by an older version lacked `rowId`, silently disabling POI loading forever. Cache schemas must version-check every field the new code requires.

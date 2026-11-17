@@ -1,153 +1,96 @@
 # Thor XIV Companion
 
-Companion de **Final Fantasy XIV** para a segunda tela do **AYN Thor**, no modo **streaming remoto** (jogo rodando no PC via Apollo/Sunshine → Moonlight DS na tela superior).
+A **Final Fantasy XIV** companion for the **AYN Thor's second screen** (and any touch device) — a touch hotbar with real cooldowns, a live zone map with POIs, and chat, all fed by the game running on your PC.
 
-Dois componentes:
-
-- **ThorXivBridge** — plugin Dalamud (C#) que roda no PC junto com o jogo. Expõe o estado (party, HP/MP, zona, coordenadas de mapa, alvo, chat) via WebSocket + HTTP na LAN, e serve a PWA do companion.
-- **companion/** — PWA que roda no navegador da tela inferior do Thor, consumindo esse WebSocket. Tem **modo demo** (funciona sem jogo, para testar a UI).
-
-## Status
-
-- F1 (streaming Moonlight DS no Thor) — depende de setup no seu PC/Thor, não feito aqui
-- F2 (plugin bridge) — **código pronto e compilado** (`dist/ThorXivBridge-0.1.0.zip`, API Dalamud 15 / net10)
-- F3 (PWA companion) — **pronta**; protocolo validado por smoke test (HTTP + WS + broadcast) com harness local
-- Validação end-to-end com o jogo real — pendente (teste no PC)
-
-## Setup no PC (F2)
-
-1. Instale **XIVLauncher** com Dalamud habilitado (padrão).
-2. Baixe/compile o plugin, ou use o `dist/ThorXivBridge-0.1.0.zip` incluído neste repo (compilado em 2026-11-16 contra Dalamud API 15).
-3. Extraia o zip em qualquer pasta, ex.: `C:\Tools\ThorXivBridge\`.
-4. No jogo: `/xlsettings` → aba **Experimental** → em *Dev Plugin Locations* adicione o caminho completo de `ThorXivBridge.dll` → salve.
-5. `/xlplugins` → **Dev Tools** → ative *Thor XIV Companion Bridge*.
-6. Use `/thorxiv` no chat: mostra `http://IP-DO-PC:11436/ws` e quantos clientes conectados.
-7. (Opcional) libere a porta TCP 11436 no firewall do PC, escopo LAN.
-
-### Configuração (arquivo `thorxiv.json` ao lado do DLL)
-
-```json
-{
-  "port": 11436,
-  "broadcastMs": 200,
-  "pollMs": 100,
-  "mapsDirectory": "",
-  "chatEnabled": true
-}
+```
+FFXIV + plugin (PC)  ──LAN WebSocket/HTTP──▶  PWA (browser or Thor APK)
 ```
 
-`mapsDirectory` vazio = pasta `maps/` ao lado do DLL. Coloque imagens de mapa nomeadas `{mapId}.jpg|png|webp` (o `mapId` atual aparece no topo da PWA). Exemplos: 184 = The Goblet, 51 = Central Thanalan.
+## ⚠️ Legal & safety notices — read first
 
-## Uso no Thor (F3/F4)
+- Unofficial fan project, **not affiliated with Square Enix**. FINAL FANTASY XIV © Square Enix Co., Ltd.
+- Depends on [XIVLauncher/Dalamud](https://github.com/goatcorp/Dalamud), a third-party tool governed by the game's terms — use at your own risk; game patches may break the plugin at any time.
+- **This is not automation**: the executor only injects static `/commands` (single lines, human-paced multi-line sequences, and skills via `ActionManager.UseAction` — the exact same code path as pressing the in-game hotbar button) when **you tap** on the second screen. Nothing reacts to game events, nothing loops, nothing plays for you.
+- **Privacy**: the bridge listens **on your LAN only** — no port forwarding, no cloud, no accounts. The only optional outbound traffic is public data: zone map images and icons from the XIVAPI CDN (allowed under SE's fan-content guidelines for non-commercial use).
+- No character data ever leaves your devices besides the LAN stream; UI preferences live in the device's `localStorage`.
 
-### Opção A — APK nativo (recomendado)
+## Components
 
-`dist/thorxiv-companion-0.1.0.apk` — app Android que:
+| Path | What it is |
+|---|---|
+| `dalamud-plugin/ThorXivBridge/` | Dalamud plugin (C#/.NET): exposes live state (HP/MP, job, zone, map coords, target, party, chat, cooldowns), runs the native command executor, serves the PWA + WebSocket |
+| `companion/` | PWA (vanilla JS, no build step): hotbar, online zone map with zoom/pan/POIs, chat, split view, demo mode |
+| `android-app/` | Android APK (WebView) for the AYN Thor: opens on the lower screen, discovers the bridge over mDNS/TCP scan, never steals gamepad focus |
+| `tests/` + `scripts/` | Protocol harness + smoke tests (no game needed), manual APK build, deploy helpers |
 
-1. Move a própria janela para a **tela inferior** (presentation display) automaticamente;
-2. **Descobre o bridge na LAN** sozinho: mDNS (`_thorxiv._tcp`, anunciado pelo plugin) **e** varredura TCP `/24` na porta 11436 como fallback — se achar o bridge salvo e vivo, abre direto; senão mostra a tela de conexão com os hosts encontrados (+ entrada manual de IP);
-3. Carrega a PWA do bridge no WebView (mesmo app, mesmo protocolo), com monitoração de "bridge perdido" e retorno automático à tela de descoberta;
-4. Tem **modo demo offline embutido** (a PWA vai dentro do APK) — funciona no Thor sem nenhum PC.
+## Requirements
 
-Instalação: copie o APK para o Thor, instale (allow unknown apps), abra. Se o plugin já estava rodando no PC com `thorxiv.json`, nada a configurar.
+- PC: Windows with XIVLauncher + Dalamud (plugin built against Dalamud API 15), FFXIV 7.x
+- Building the plugin needs .NET 10 SDK; running it just needs the zip extracted
+- Second device: any modern browser, or the APK (Android 13+, tested on AYN Thor / Cocoon OS)
+- Same LAN
 
-Firewall do PC: para o mDNS, permitir UDP 5353 na rede privada (o Windows pergunta na primeira execução). Sem isso, só o scan `/24` — que ainda acha o bridge.
+## Install
 
-Config do port custom: `scripts/build-apk.sh` gera keystore de debug em `scripts/debug.keystore`.
+### 1. Plugin on the PC
 
-### Opção B — navegador na tela de baixo
+1. Grab `ThorXivBridge-<version>.zip` from the [GitHub Releases](../../releases) of this repo and extract to a fixed folder, e.g. `C:\Tools\ThorXivBridge`.
+2. In game: `/xlsettings` → **Experimental** → *Dev Plugin Locations* → add `C:\Tools\ThorXivBridge\ThorXivBridge.dll` → save.
+3. `/xlplugins` → **Dev Tools** → enable **Thor XIV Companion Bridge**.
+4. `/thorxiv` in chat prints the bridge URL (`http://<PC-IP>:11436/`) and connected clients.
+5. Allow TCP `11436` (and UDP `5353` for mDNS) in the Windows firewall — **private networks only**.
 
-`http://IP-DO-PC:11436/` no Hermit/Chrome (Wayfinder app pair com Moonlight DS).
+Optional config — `thorxiv.json` next to the DLL: `port`, `pollMs`, `broadcastMs`, `chatEnabled`.
 
-Ordem de uso típica: abrir o ThorXIV (fica na tela de baixo) → abrir Moonlight DS (tela de cima) → jogar.
+### 2. Companion on the device
 
-## Executores (v0.5+)
+- **APK (recommended on Thor)**: install `thorxiv-companion-<version>.apk` (allow unknown apps). It auto-discovers the bridge (mDNS + subnet TCP scan), lands on the lower display under Cocoon OS, and never takes input focus from the game. No PC? Built-in offline demo mode.
+- **Browser**: open `http://<PC-IP>:11436/` on the second screen.
 
-Comandos tocam no jogo **sem plugins extras**: o bridge injeta via `RaptureShellModule.ExecuteCommandInner`
-(FFXIVClientStructs) na thread do framework. `POST /api/command` aceita apenas tipos nativos:
+## Using it
 
-- `{"type":"command","cmd":"/ac \"Holy Sheltron\" <1>"}` → executa 1 linha
-- `{"type":"skill","actionId":29,"target":"target"}` → **skill nativa** (mesmo caminho do botão da hotbar do jogo; alvos `auto|target|self|p1..p8`; catálogo com descrição em `GET /api/actions`)
-- `{"type":"sequence","lines":["/ac ...","/ac ..."],"delayMs":200}` → macro próprio multi-linha (`//` comenta)
+- **Hotbar** — grid presets 2x2/3x3/4x4; slot kinds: `command` (one line), `sequence` (multi-line with human delay) and `Skill` (picked from your current class's action catalog, icons + tooltips). **Each job gets its own hotbar** — it switches automatically when you change class in game. Editing: ✏️ Edit → tap a slot to edit, drag to reorder/swap, long-press for tooltips; ⚙️ popover has grid presets, export/import JSON and the job chip; ◫ toggles the split view.
+- **Real cooldowns** — skill buttons show live recast (darkening bar + seconds) sourced from `ActionManager`; tapping a charging button tells you the remaining time instead of sending it.
+- **Map** — current zone rendered from XIVAPI's composed map image (cached; works offline after first visit), player marker on the game's exact coordinate system, zoom +/−, pan, and a cycling camera mode (◎ auto-frame → ◉ follow → ◇ explore). POIs: aetherytes (cyan diamond), aethernet nodes (gold) and district markers.
+- **Chat** — colored channel log + send bar (Say/Party/LS1) through the same human-tap command executor.
+- **Settings** — custom WebSocket endpoint, demo toggle.
+- **Split view (◫)** — map on the left half, hotbar on the right, same live canvas, persisted.
 
-GET `/api/macros` lista os macros do jogador (nome/set/id/linhas) — a PWA usa para importar botões prontos como sequências nativas.
-Segurança: allow-list de tipos, só `/comandos` estáticos disparados por toque humano — sem automação reativa.
+## Protocol (summary)
 
-## Protocolo (v1)
+- `GET /` → PWA · `GET /api/state` → snapshot · `GET /api/actions` → current class catalog · `GET /api/macros` → your macros (importable as sequences) · `WS /ws` → continuous snapshot broadcast · `POST /api/command` → `{type: command|skill|sequence, ...}` (allow-listed, human-triggered)
 
-- `GET /` — PWA companion (assets em `companion/` dentro do pacote do plugin)
-- `GET /api/state` — snapshot único (polling fallback)
-- `GET /ws` (WebSocket) — push de snapshot a cada `broadcastMs`
+Coordinate systems follow the official datamining docs (`xivapi/ffxiv-datamining/docs/MapCoordinates.md`); map images and icons come from the XIVAPI v2 CDN.
 
-Snapshot:
-
-```json
-{
-  "type": "state", "ts": 1731700000000, "loggedIn": true,
-  "zone": {"id": 399, "name": "The Goblet"},
-  "map": {"id": 184, "name": "The Goblet"},
-  "player": {"name": "...", "job": "DRG", "level": 100,
-             "hp": 300000, "maxHp": 432100, "mp": 9000, "maxMp": 10000,
-             "world": {"x": 0, "y": 0, "z": 0},
-             "mapCoords": {"x": 21.0, "y": 21.0}},
-  "target": {"name": "...", "hp": 0, "maxHp": 0, "dead": false},
-  "party": [{"name": "...", "job": "WHM", "level": 100,
-             "hp": 0, "maxHp": 0, "mp": 0, "maxMp": 0, "online": true}],
-  "chat": [{"channel": 14, "sender": "...", "text": "...", "stamp": 1731700000}]
-}
-```
-
-`channel` = `XivChatType` da Dalamud (14 Party, 13/12 Tell, 10 Say, 57 System, ...).
-
-## Desenvolvimento / testes
+## Development
 
 ```bash
-# compilar o plugin (precisa .NET 10 SDK)
-dotnet build dalamud-plugin/ThorXivBridge -c Release
-# artefato: dalamud-plugin/ThorXivBridge/bin/Release/ThorXivBridge/latest.zip
+# plugin (needs .NET 10 SDK and Dalamud refs via DALAMUD_HOME)
+dotnet build dalamud-plugin/ThorXivBridge -c Release   # -> bin/Release/ThorXivBridge/latest.zip
 
-# smoke test do protocolo (sem jogo): sobe o harness e valida HTTP+WS+static
+# protocol validation without the game
 dotnet build tests/ServerHarness -c Release
 dotnet tests/ServerHarness/bin/Release/net10.0/ServerHarness.dll companion 11437 &
 node scripts/smoke.mjs 11437
 
-# APK do Thor (build manual, sem Gradle) — requer JDK17, android-sdk-build-tools
-# (Debian arm64), android-33 em /tmp/opencode/sdk/platforms e r8.jar em /tmp/opencode
-scripts/build-apk.sh
-# -> dist/thorxiv-companion-0.1.0.apk (assinado v2, 34 KB)
+# APK (JDK 17 + android build-tools + android-33 platform; Gradle-free, see scripts/build-apk.sh)
+APK_VERSION_NAME=x.y.z scripts/build-apk.sh
 ```
 
-No Linux o build do plugin usa `DALAMUD_HOME` apontando para as referências da Dalamud (ex.: zip de `https://goatcorp.github.io/dalamud-distrib/stg/latest.zip` extraído). No Windows basta ter XIVLauncher instalado.
-
-### Deploy no PC (OBRIGATÓRIO após cada build do plugin)
-
-Toda versão nova do plugin **precisa ser deployada no PC** antes de considerar a tarefa concluída
-(o usuário testa em jogo). Use o script (roda na Axel, via SSH com chave `id_ed25519_omv`):
-
-```bash
-scripts/deploy-pc.sh dist/ThorXivBridge-<versão>.zip
-# -> copia o zip, faz backup do DLL atual (.bak), extrai em C:\Tools\ThorXivBridge
-#    e imprime o hash SHA256 do DLL novo p/ conferir com o hash local
-```
-
-- Se imprimir `LOCKED: DLL em uso` — o FFXIV está aberto; feche o jogo e rode de novo.
-- A config do XIVLauncher (`DevPluginLoadLocations` → `C:\Tools\ThorXivBridge\ThorXivBridge.dll`,
-  `StartOnBoot`) é permanente — o deploy só troca arquivos.
-- Validar com o hash (`Get-FileHash` no PC vs `sha256sum` local) e registrar no vault o hash.
-- Se o jogo estiver aberto no momento do deploy, avise o usuário para reiniciar o FFXIV e recarregar.
-
-## Notas de segurança / política
-
-- O bridge escuta em todas as interfaces (LAN) — exponha apenas em rede confiável; nada de port forward.
-- Ferramentas de terceiros no FFXIV (Dalamud/leitura de estado) são toleradas pela Square Enix na prática, mas sem garantia. O bridge injeta apenas comandos estáticos `/...` disparados por toque humano no companion — sem automação, sem loop, sem reação a eventos do jogo.
+The mandatory per-round workflow (build → smoke → bump → deploy → commit) and all accumulated engineering lessons live in [`AGENTS.md`](AGENTS.md).
 
 ## Roadmap
 
-- [x] F2 plugin bridge (compilado, protocolo validado; + anúncio mDNS)
-- [x] F3 PWA companion (minimapa, party, chat, alvo, demo, settings)
-- [x] F4 APK do Thor (tela de baixo + descoberta mDNS/scan + WebView + demo offline) — **código pronto, APK assinado; falta validar no device**
-- [ ] F1 streaming no Thor — testar com Moonlight DS + `dist/ThorXivBridge-0.1.0.zip`
-- [ ] validação em jogo real (coordenadas, nomes, jobs, canais de chat)
-- [ ] F6 conteúdo offline extra (checklists de duty)
+Done: full hotbar (per-job, cooldowns, drag & drop, split), online map with POIs, chat with sending. Next: quest/duty tracker, party buffs layer, consumable presets, UX polish. See [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
-Detalhes e decisões no vault: `Personal/4. Projetos/Thor XIV Companion/`.
+## Credits
+
+- [goatcorp](https://github.com/goatcorp) — Dalamud / XIVLauncher, FFXIVClientStructs, Lumina
+- [XIVAPI](https://xivapi.com) — game data API and icon/map CDN; [ffxiv-datamining](https://github.com/xivapi/ffxiv-datamining) for the map coordinate formulas
+- XIVMap / XIVApp communities — map geometry references
+- Square Enix — FFXIV and all game assets (none are redistributed here)
+- Maintained by **phyro**, developed with AI agents (opencode + Hermes) since 2026-11
+
+## License
+
+MIT — see [LICENSE](LICENSE). Game imagery remains © Square Enix.

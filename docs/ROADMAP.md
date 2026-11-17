@@ -1,98 +1,96 @@
-# Roadmap de Features — Thor XIV Companion
+# Feature Roadmap — Thor XIV Companion
 
-> Atualizado: 2026-11-17 (checkpoint bugfixes v0.5.6). Referência de layout/tracks: [DS-Forever](https://github.com/Jreese702/DS-Forever) (companion dual-screen de WoW no Thor) — borrowed: tracks de features, companion-first, guias offline. Mantemos nossa arquitetura (bridge + WebSocket + PWA/APK) e nossas features.
-
----
-
-## T1 — Fundação ✅ concluída
-
-- Bridge Dalamud (WebSocket 5 Hz + HTTP + mDNS + companion embutido na DLL)
-- PWA: minimapa, party, chat (canais XivChatType), target, self, relógio Eorzean
-- APK Thor: tela de baixo, descoberta mDNS/scan, demo offline, watchdog
-- PC: instalação deployada, firewall LAN-only, IP estático .194; deploy de novas builds via `scripts/deploy-pc.sh` (obrigatório após cada build do plugin)
-
-## T2 — Macro / Hotkey bar ✅ checkpoint v0.5.6 (feature-complete p/ v1)
-
-- [x] **M1**: grid com **executor nativo** (`RaptureShellModule`): `comando` (1 linha) ou `sequência` (multi-linha com delay); editor, confirmação, import/export
-- [x] **M1.5**: tipo **Skill (nativo)** — `ActionManager.UseAction`, catálogo da classe (`GET /api/actions`, `icon` + `desc` via `ActionTransient`), alvos `auto/target/self/p1–p8`
-- [x] **M1.7 (UX, 0.5.1–0.5.6)**: ícones CDN, tooltip long-press persistente, editor sheet + segmented, slots editáveis, **drag & drop** (move/swap), **grid 3x3/4x3/4x4** (Config centralizado), layout "uma aba por vez", identidade visual FFXIV (tokens.css), gesture-proofing WebView
-- [x] **M4**: reordenar arrastando + import/export JSON
-- [x] **M5 (re-escopo)**: ícones via CDN xivapi (online-first)
-- [x] **M2**: cooldown real nos botões (0.5.9; countdown corrigido 0.5.12 — restante=total−elapsed)
-- [x] **M6**: hotbar POR JOB (0.5.15): buckets por `player.jobId` com troca automática, catálogo de skills por job, export/import v2, chip de job no ⚙️ nos botões — próximo item natural
-- [x] **M7**: modo **Juntas (◫)** — hotbar 50% + mapa 50% (0.5.24); persistido; canvas/id instance único preservado
-- [ ] **M3**: páginas de hotbar (swipe) — avaliar demanda (grid configurável já atende)
-- Qualidade: `scripts/check-dom.mjs` no smoke; lições no `AGENTS.md`; ciclo = build → smoke → versão → APK → deploy PC → commit
-
-## T10 — Settings (mapeamento futuro, 2026-11-17)
-
-A aba Settings hoje só tem endpoint WS + modo demo. Mapa de opções para as próximas rodadas:
-
-- [ ] **Idioma** (pt-BR / en, depois de/fr/ja) — exige extrair strings da UI p/ um `i18n.js` (chave→texto); default: detectar `navigator.language`
-- [ ] **Color scheme** — temas via `tokens.css` (Midnight Gold default, Claro, Alto contraste, Daltônico p/ barras HP/MP); trocar só os tokens, zero mudança de layout
-- [ ] **Aparência/layout** — escala da UI (root font-size), preset de grade default da hotbar, mostrar/ocultar target no status-bar, densidade dos slots
-- [ ] **Conexão** — host/porta WS (já ✓), descoberta automática (mDNS `_thorxiv._tcp`), reconexão automática, status de latência
-- [ ] **Mapa** — fonte das imagens (online xivapi ✓ default / assets locais opcionais), camadas de pins (aetheryte, FATE, marked spots), zoom inicial
-- [ ] **Chat** — canal default p/ envio (party/linkshell/say), filtro por canal, mensagens rápidas configuráveis
-- [ ] **Notificações** (T8) — vibração ao terminar cooldown, sons on/off, alerta de role/kill em party
-- [ ] **Acessibilidade** — botões maiores (4x2 forçado), reduz movimento (desliga ghost/anim), alto contraste
-- [ ] **Backup** — export/import de TUDO (hotbar+settings) num JSON só; reset de fábrica
-Ordem sugerida: idioma+temes juntos (rodada leve), depois conexão/backup, resto conforme demanda.
-
-## T3 — Mapa útil
-
-> **✅ FEITO 0.5.11 (2026-11-17):** fundo da zona via XIVAPI v2 (`/api/search?sheets=Map&fields=Id&query=TerritoryType={id}` → `Id` `s1t1/01` → `/api/asset/map/{key}/{index}?format=jpg`), cache `txmap.v1`, fallback grade + badge. **Fonte de mapa (decisão 2026-11-17):**xivapi v2 compõe mapas por zona em runtime — `GET https://v2.xivapi.com/api/asset/map/{territoryType}/{subIndex}?format=jpg` (ex.: `s1d1/00`); hotlink encorajado pelo provedor, ~100–300 KB/zona, cache do browser resolve. Assets locais viram opcionais (offline não é meta). Falta o bridge expor `territoryType` numérico (row_id) no estado.
-
-- [ ] Mapa por zona: dropar imagens `maps/{mapId}.{png|jpg}` (uso da convenção já criada); opção futura de extrair do próprio jogo
-- [ ] Toque no mapa → abre o mapa grande do jogo com flag (pendente de executor de comando adequado)
-- [ ] Pins de aetherytes/markers (dados estáticos de XIVAPI)
-- [ ] Radar de hunts (fase posterior; fonte: endpoint de hunt público)
-
-## T3.3 — POIs no mapa (parcial, 0.5.20)
-
-- [x] Infra: busca MapMarker via xivapi v2 (cursor+cache `txpoi.v1`), pipeline de projeção igual ao pino (Y_FLIP=true validado contra MapUtil), classificação por ícone (60311 aetheryte ciano, comércio dourado pronto, demais cinza sutil)
-- [x] ◎ ciclo de modos AUTO→SEGUIR(◉)→EXPLORAR(◇); pan/± caem em EXPLORAR
-- [ ] Cobertura completa: API v2 deduplica subrows → poucas zonas retornam tudo. Fonte definitiva: plugin expor marcadores via AgentMap do jogo (próxima rodada, payload `pois[]` no state)
-
-## T4 — Tracker de quests/duty
-
-- [ ] Quest log no payload (Dalamud: `QuestManager`/Journal) — painel "quests" com tracker ativo (layout referência DS-Forever: tracked quest fixo no topo)
-- [ ] Fases de duty (reusable content) + progresso de instância
-- [ ] Checklist manual por duty (offline-friendly, estilo Game Twin)
-
-## T5 — Party melhorada
-
-- [ ] Papéis (T/H/D) com cores + ícones de job (imagens do jogo via bridge)
-- [ ] Status/buffs da party no payload (`Statuses` do `IPartyMember`/ObjectTable)
-- [ ] Posições relativas (minimapa com dots da party — já temos coords, falta render)
-- [ ] DPS/encounter via ACT/IINACT WebSocket (fase posterior, opcional)
-
-## T6 — Chat completo
-
-- [ ] Filtro por canal + busca
-- [ ] Enviar mensagem/comando pela tela de baixo (comando nativo `/say`, `/p`, `/shout` via `/api/command`)
-- [ ] Cores por linha de battle chat (action/heal/dmg já categorizados; refinar)
-
-## T7 — Guias offline
-
-- [ ] Wiki/checklists por duty salvos (semelhante ao guia do DS-Forever)
-- [ ] Notas por personagem/perfil (localStorage, exportável)
-
-## T8 — App Android nativo (substituir WebView)
-
-- [x] Não rouba foco de gamepad/teclado do jogo (0.5.14): janela `FLAG_NOT_FOCUSABLE` no companion; foco temporário p/ IME via `ThorNative.requestTextFocus`
-- [ ] `Presentation` não-focusável como no padrão gen1recomp; vibration/haptic ao apertar macro
-- [ ] Slots de hotbar visíveis mesmo sem rede (último snapshot cacheado)
-- [ ] Atalho de tela + profile por jogo (integração Wayfinder)
-
-## T9 — Extras/avançado
-
-- [ ] Streaming de pair (estilo DS-Forever Desktop: código de pareamento) — só se valer o custo
+> Updated: 2026-11-17 (English is the project's default documentation language; pt-BR may come back as an extra). Layout/track reference: [DS-Forever](https://github.com/Jreese702/DS-Forever) (dual-screen WoW companion on the Thor) — borrowed: feature tracks, companion-first, offline guides. We keep our own architecture (bridge + WebSocket + PWA/APK) and our own features.
 
 ---
 
-## Notas de política/segurança
+## T1 — Foundation ✅ done
 
-- Hotbar só executa **macro de jogo ou /command digitável**: equivale a apertar um botão do hotbar — sem automação, sem loop, sem reação a eventos do jogo. Manter assim para respeito à política da SE.
-- Bridge faz allow-list de telegramas (ExecuteCommand, Macro, PrintMessage, Bundle); Doodle/Subscribe/Form ficam desabilitados até T9.
-- `/api/command` só ouve na LAN; respostas de erro não vazam stack.
+- Dalamud bridge (WebSocket ~5 Hz + HTTP + mDNS + PWA served from the plugin)
+- PWA: minimap, party, chat (XivChatType channels), target, self, Eorzean clock
+- Thor APK: lower screen, mDNS/scan discovery, offline demo, watchdog
+- PC: deployed install, LAN-only firewall, static IP; every plugin build ships via `scripts/deploy-pc.sh` (mandatory)
+
+## T2 — Macro / Hotkey bar ✅ complete (0.5.x series)
+
+- [x] **M1**: grid with **native executor** (`RaptureShellModule`): `command` (one line) or `sequence` (multi-line, human delay); editor, confirm, import/export
+- [x] **M1.5**: **Skill (native)** kind — `ActionManager.UseAction`, class catalog (`GET /api/actions`, `icon` + `desc` via `ActionTransient`), targets `auto/target/self/p1–p8`
+- [x] **M1.7 (UX, 0.5.1–0.5.25)**: CDN icons, persistent long-press tooltip, sheet editor + segmented control, drag & drop (move/swap), grid presets (now **2x2/3x3/4x4**), "one tab at a time" layout, FFXIV-style design tokens, WebView gesture-proofing (jitter-safe touch recognizer)
+- [x] **M2**: real cooldowns (0.5.9; countdown fixed 0.5.12 — remaining = total − elapsed)
+- [x] **M3**: superseded by configurable grids (kept as backlog)
+- [x] **M4**: reorder by dragging + JSON import/export
+- [x] **M5 (re-scoped)**: icons via XIVAPI CDN (online-first)
+- [x] **M6**: **per-job hotbars** (0.5.15) — buckets keyed by `player.jobId`, auto-switch, per-job skill catalog, export/import v2, job chip in ⚙️
+- [x] **M7**: **split view ◫** (0.5.24, refined 0.5.25) — map left / hotbar right, persisted, single canvas instance
+
+## T3 — Useful map
+
+- [x] Zone background via XIVAPI v2 (resolve Map row → composed `.../asset/map/{key}/{index}` jpg; caches `txmap.v1`; grid fallback + badge)
+- [x] Correct player marker (official coordinate formula; camera modes ◎/◉/◇; zoom +/−, pan, no page scroll)
+- [x] POIs (see T3.3)
+- [ ] Tap map → open in-game map with a flag (needs proper command executor support)
+- [ ] Hunt radar (later phase; public hunt endpoint)
+
+## T3.3 — Map POIs (partial, 0.5.25)
+
+- [x] Infrastructure: MapMarker search via XIVAPI v2 (cursor pagination + `txpoi.v1` cache), same projection pipeline as the player pin, icon-verified classification (60453 aetheryte → cyan diamond, 60311 aethernet → gold, 60441 district triangle, rest subtle gray)
+- [ ] Full coverage: the v2 API collapses sub-rows → some zones return only a few markers. Definitive source: plugin exposing markers via the game's `AgentMap` (next: `pois[]` in the state payload)
+
+## T10 — Settings (planned mapping, 2026-11-17)
+
+The Settings tab currently has only the WS endpoint + demo toggle. Options map for upcoming rounds:
+
+- [ ] **Language** (en default; pt-BR/de/fr/ja later) — requires extracting UI strings into `i18n.js`; default from `navigator.language`
+- [ ] **Color scheme** — themes via `tokens.css` (Midnight Gold default, Light, High contrast, colorblind-safe HP/MP bars); token swap only, zero layout changes
+- [ ] **Appearance/layout** — UI scale (root font-size), default hotbar grid preset, show/hide target in status bar, slot density
+- [ ] **Connection** — WS host/port (done), auto-discovery (mDNS `_thorxiv._tcp`), auto-reconnect, latency readout
+- [ ] **Map** — image source (online XIVAPI default / optional local assets), pin layers (aetheryte, FATE, custom marks), initial zoom
+- [ ] **Chat** — default send channel (party/linkshell/say), channel filter, quick messages
+- [ ] **Notifications** (T8) — haptic when cooldown ends, sounds on/off, party role alerts
+- [ ] **Accessibility** — bigger buttons, reduced motion (no ghost/animations), high contrast
+- [ ] **Backup** — single JSON with everything (hotbar+settings); factory reset
+Suggested order: language + themes together (light round), then connection/backup, rest on demand.
+
+## T4 — Quest/duty tracker
+
+- [ ] Quest log in the payload (Dalamud `QuestManager`/Journal) — quest panel with tracked quest pinned (DS-Forever layout reference)
+- [ ] Duty (reusable content) phases + instance progress
+- [ ] Manual duty checklist (Game-Twin style)
+
+## T5 — Party, improved
+
+- [ ] Roles (T/H/D) with colors + job icons
+- [ ] Party statuses/buffs in the payload (`Statuses` from `IPartyMember`/ObjectTable)
+- [ ] Relative positions on the minimap (dots; data already in state)
+- [ ] DPS/encounter via ACT/IINACT WebSocket (later, optional)
+
+## T6 — Chat, complete
+
+- [x] Send messages/commands from the second screen (`/say`, `/p`, `/ls1` via the native executor)
+- [ ] Per-channel filter + search
+- [ ] Battle-chat line colors (already categorized; refine)
+
+## T7 — Guides
+
+- [ ] Duty wiki/checklists stored per content (DS-Forever-style guide)
+- [ ] Notes per character/profile (localStorage, exportable)
+
+## T8 — Native Android app (replace plain WebView)
+
+- [x] Never steals gamepad/keyboard focus from the game (0.5.14+): `FLAG_NOT_FOCUSABLE` window, temporary IME focus through `ThorNative`
+- [x] Installs and verifies itself: deploy pipeline opens the app and asserts resumed + crash-free (deploy-thor.sh)
+- [ ] Last-state cached bars/hotbar visible without network
+- [ ] Home shortcut + per-game profile (Wayfinder integration)
+
+## T9 — Extras/advanced
+
+- [ ] Paired streaming (DS-Forever Desktop pairing-code style) — only if it earns its cost
+- [ ] Waymarks/doodles via Telesto-class plugin (would reintroduce the removed dependency; open question)
+
+---
+
+## Policy/security notes
+
+- The hotbar only executes a **game macro or a typed `/command`**: equivalent to pressing a hotbar button — no automation, no loops, no reacting to game events. Keep it this way out of respect for SE's terms.
+- `/api/command` allow-lists native types (`command|skill|sequence`); Telesto was removed entirely (0.5.0).
+- `/api/command` only answers on the LAN; error responses never leak stacks.
