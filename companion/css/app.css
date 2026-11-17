@@ -272,10 +272,10 @@ body {
 .hb-tt-name { font-weight: 700; font-size: 16px; color: var(--text); }
 .hb-tt-desc { margin-top: 6px; font-size: 14px; color: var(--text-muted); line-height: 1.45; word-wrap: break-word; }
 .hb-tt-id { margin-top: 8px; font-size: 12px; font-family: ui-monospace, monospace; color: var(--text-muted); }
-/* botao de ferramentas (absoluto, canto superior direito da view da hotbar, sem altura de layout) */
-#hb-gear {
+/* botoes de canto da hotbar (gear e split): mesmo estilo, sem duplicar regras */
+#hb-gear, #hb-split {
   position: absolute;
-  top: 10px; right: 10px;
+  top: 10px;
   z-index: 5;
   width: 44px; height: 44px;
   border-radius: var(--radius);
@@ -287,8 +287,10 @@ body {
   cursor: pointer;
   text-shadow: var(--text-shadow);
 }
-#hb-gear:hover { filter: brightness(1.12); }
-#hb-gear:focus-visible { outline: none; box-shadow: var(--focus-glow); }
+#hb-gear { right: 10px; }
+#hb-split { right: 56px; } /* 44px do gear + 12px de gap */
+#hb-gear:hover, #hb-split:hover { filter: brightness(1.12); }
+#hb-gear:focus-visible, #hb-split:focus-visible { outline: none; box-shadow: var(--focus-glow); }
 
 /* toast de feedback no rodapé da aba hotbar */
 #hb-toast {
@@ -326,3 +328,47 @@ body {
 .hb-drag-img { width: 36px; height: 36px; border-radius: var(--radius); background: var(--panel-solid); }
 .hb-drag-fb { font-size: 34px; line-height: 1; display: none; }
 .hb-drag-name { font-size: 14px; color: var(--text); min-width: 0; }
+
+/* ==== T2/M7 split: hotbar esquerda + mapa direito (50/50), so enquanto body.split ==== */
+/* fora do split o #split-right nao existe no layout */
+#split-right { display: none; }
+
+body.split #status-bar { display: none; }
+body.split #tabs [data-tab=mapa] { display: none; }
+
+body.split #tab-hotbar.active {
+  display: flex;
+  flex-direction: row;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+body.split #tab-hotbar.active > * { min-width: 0; }
+
+/* pane esquerdo: #hotbar-wrap mesmo (position:relative ja existe) */
+body.split #hotbar-wrap {
+  flex: 1 1 50%;
+  padding: 8px;
+  min-width: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+/* pane direito: estatico no index.html, exibido apenas no split */
+body.split #split-right {
+  display: flex;
+  flex: 1 1 50%;
+  padding: 8px;
+  min-width: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+/* mesmo canvas do Minimap (so mudou de pai): altura cheia do pane, largura segue o aspect 1 */
+body.split #split-right #minimap {
+  width: auto;
+  height: 100%;
+  max-width: 100%;
+  max-height: none;
+}

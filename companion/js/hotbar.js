@@ -131,6 +131,7 @@
     wrap.innerHTML = `
       <div id="hotbar-grid"></div>
       <button id="hb-gear" type="button" aria-label="Ferramentas da hotbar">⚙️</button>
+      <button id="hb-split" type="button" aria-label="Unir/separar mapa">◫</button>
       <div id="hb-toast" class="hidden"></div>
       <div id="hb-editor" class="hidden"></div>
       <div id="hb-confirm" class="hidden"></div>
@@ -144,6 +145,7 @@
     grid = $("hotbar-grid");
     renderGrid();
     $("hb-gear").onclick = openTools;
+    $("hb-split").onclick = toggleSplit;
 
     // reconhecedor global de move/up (segue o dedo mesmo saindo do elemento do slot)
     document.addEventListener("pointermove", onGlobalMove);
@@ -922,4 +924,49 @@
       if (sig) status("hotbar: " + esc(sig));
     }
   }
+// ==== T2/M7 split: hotbar esquerda + mapa direito, 50/50, toggle por ◫ ====
+// Estado: localStorage "split.v1" ("1"/"0"); "split.seen" marca que a dica ja foi exibida.
+const SPLIT_KEY = "split.v1";
+const SPLIT_SEEN = "split.seen";
+// Guarda pai original + elementos do mapa na 1a ativacao para restauracao EXATA (idempotente).
+let splitOrig = null; // { parent: Element, els: [mapFit, mapHud, coords] }
+
+function splitMapEls() {
+  const tab = $("tab-mapa");
+  return [tab.querySelector(".map-fit"), $("map-hud"), $("coords")];
+}
+
+function moveSplitMap(on) {
+  const tab = $("tab-mapa");
+  const sr = $("split-right");
+  const wrap = $("hotbar-wrap");
+  if (on) {
+    if (!splitOrig) splitOrig = { parent: tab, els: splitMapEls() };
+    splitOrig.els.forEach((el) => el && sr.appendChild(el)); // appendChild move o no ja existente
+    wrap.classList.add("split-left");
+  } else {
+    if (splitOrig)
+      splitOrig.els.forEach((el) => el && splitOrig.parent.appendChild(el)); // volta aos pais originais
+    wrap.classList.remove("split-left");
+  }
+}
+
+function applySplit(on) {
+  on = !!on;
+  document.body.classList.toggle("split", on);
+  localStorage.setItem(SPLIT_KEY, on ? "1" : "0");
+  moveSplitMap(on);
+  if (on && !localStorage.getItem(SPLIT_SEEN)) {
+    localStorage.setItem(SPLIT_SEEN, "1");
+    status("dica: grade 3x3 fica melhor junto"); // primeira vez: so dica, nao força preset
+  }
+}
+
+function toggleSplit() {
+  applySplit(!document.body.classList.contains("split"));
+}
+
+// app.js chama no boot: window.__txSplit.apply(localStorage.getItem("split.v1") === "1")
+window.__txSplit = { apply: applySplit };
+
 })();

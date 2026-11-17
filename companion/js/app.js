@@ -23,6 +23,9 @@
     try { localStorage.setItem("demo", "1"); } catch (e) { /* noop */ }
   }
 
+  // T2/M7 split: estado salvo aplica no boot, antes de WS/timers
+  if (window.__txSplit) window.__txSplit.apply(localStorage.getItem("split.v1") === "1");
+
   let ws = null;
   let demoTimer = null;
   let backoff = 1000;
