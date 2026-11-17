@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deploy do APK no AYN Thor conectado via USB ao PC (adb). Silencioso-aviso se ausente/não autorizado.
+# Deploy do APK no AYN Thor conectado via USB ao PC (adb). Avisos se ausente/não autorizado.
 # Uso: scripts/deploy-thor.sh dist/thorxiv-companion-<v>.apk
 set -euo pipefail
 
@@ -15,17 +15,17 @@ NAME="$(basename "$APK")"
 
 scp "${SSH_OPTS[@]}" "$APK" "$PC_HOST:/Users/phyro/$NAME"
 ssh "${SSH_OPTS[@]}" "$PC_HOST" "
-\$ErrorActionPreference='Stop'
+\$ErrorActionPreference='Continue'
 \$adb='$ADB'; \$apk='C:/Users/phyro/$NAME'
-\$dev = (& \$adb devices) | Select-String '\tabdevice' | ForEach-Object { (\$_ -split '\s+')[0] }
-if (-not \$dev) {
-  \$un = (& \$adb devices) | Select-String '\tunauthorized'
-  if (\$un) { Write-Output 'THOR-UNAUTHORIZED: aprove o dialogo de USB debugging na tela do Thor' }
-  else { Write-Output 'THOR-NOT-CONNECTED' }
-  exit 0
-}
-\$id = \$dev | Select-Object -First 1
-& \$adb -s \$id install -r \$apk | Select-Object -Last 2
-\$v = (& \$adb -s \$id shell dumpsys package com.phyro.thorxiv | Select-String 'versionName' | Select-Object -First 1)
+& \$adb start-server 2>&1 | Out-Null
+\$lines = & \$adb devices 2>&1 | Where-Object { \$_ -match '\s(device|unauthorized)\$' }
+\$unauth = \$lines | Where-Object { \$_ -match 'unauthorized' }
+\$ok = \$lines | Where-Object { \$_ -match 'device' }
+if (-not \$lines) { Write-Output 'THOR-NOT-CONNECTED'; exit 0 }
+if (-not \$ok) { Write-Output 'THOR-UNAUTHORIZED: aprove o dialogo de USB debugging na tela do Thor'; exit 0 }
+\$id = (@(\$ok)[0] -split '\s+')[0]
+Write-Output (\"THOR-DEVICE: \" + \$id)
+& \$adb -s \$id install -r \$apk 2>&1 | Select-Object -Last 2
+\$v = & \$adb -s \$id shell dumpsys package com.phyro.thorxiv 2>&1 | Select-String 'versionName' | Select-Object -First 1
 Write-Output (\"THOR-INSTALLED: \" + \$id + ' ' + \$v)
 "

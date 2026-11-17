@@ -14,6 +14,7 @@ README.md e no vault (`4. Projetos/Thor XIV Companion`).
 1. Fazer as alterações.
 2. Build: `DALAMUD_HOME=/root/.xlcore/dalamud/Hooks/dev dotnet build dalamud-plugin/ThorXivBridge -c Release` → 0 erros.
 3. Smoke: `dotnet build tests/ServerHarness -c Release` + harness + `node scripts/smoke.mjs <porta> <dir-pwa>` → SMOKE PASSOU
+3b. (opcional, quando Thor conectado ao PC) `scripts/deploy-pc.sh <zip> <apk>` roda o Thor automaticamente via adb
    (o smoke inclui `scripts/check-dom.mjs`: ids únicos, referências válidas e nenhuma captura
    top-level de id criado dinamicamente — o smoke NÃO executa JS da PWA, o check-dom cobre isso).
 4. Bump de versão no csproj (breaking → minor; fix → patch) e gerar `dist/ThorXivBridge-<v>.zip`.
