@@ -502,25 +502,45 @@
           const base = kind === "aetheryte" ? 9 : (kind === "aethernet" ? 8 : 7);
           const r = Math.min(28, base * (0.95 + 0.45 * (this.scale - 1)));
           if (sx < -r - 8 || sx > W + r + 8 || sy < -r - 8 || sy > H + r + 8) continue;
+          const col = kind === "aetheryte" ? POI_AETHERYTE
+            : (kind === "default" ? POI_DEFAULT : POI_COMMERCE);
           ctx.beginPath();
           if (kind === "aetheryte") {
-            // losango
+            // losango (cristal)
             ctx.moveTo(sx, sy - r); ctx.lineTo(sx + r, sy);
             ctx.lineTo(sx, sy + r); ctx.lineTo(sx - r, sy); ctx.closePath();
+          } else if (kind === "district") {
+            // triângulo (marcador de alvo/NPC como no jogo)
+            ctx.moveTo(sx, sy + r); ctx.lineTo(sx - r, sy - r); ctx.lineTo(sx + r, sy - r); ctx.closePath();
+          } else if (kind === "aethernet") {
+            // estrela de 4 pontas (nó de aethernet)
+            ctx.moveTo(sx, sy - r); ctx.lineTo(sx + r * 0.38, sy - r * 0.38); ctx.lineTo(sx + r, sy);
+            ctx.lineTo(sx + r * 0.38, sy + r * 0.38); ctx.lineTo(sx, sy + r);
+            ctx.lineTo(sx - r * 0.38, sy + r * 0.38); ctx.lineTo(sx - r, sy);
+            ctx.lineTo(sx - r * 0.38, sy - r * 0.38); ctx.closePath();
           } else {
-            ctx.arc(sx, sy, r, 0, Math.PI * 2);
+            ctx.arc(sx, sy, r * 0.8, 0, Math.PI * 2);
           }
-          ctx.fillStyle = kind === "aetheryte" ? POI_AETHERYTE
-            : (kind === "default" ? POI_DEFAULT : POI_COMMERCE);
+          ctx.fillStyle = col;
           ctx.fill();
           ctx.lineWidth = kind === "default" ? 1 : 1.5;
           ctx.strokeStyle = MAP_PIN_STROKE;
           ctx.stroke();
-          // rótulo curto apenas com zoom razoável
-          if ((kind === "aetheryte" || kind === "aethernet") && this.scale >= 1.6 && p.name) {
-            ctx.fillStyle = POI_AETHERYTE;
-            ctx.font = Math.round(9 + 3 * (this.scale - 1)) + "px sans-serif";
-            ctx.fillText(p.name.length > 14 ? p.name.slice(0, 13) + "\u2026" : p.name, sx + r + 5, sy + 4);
+          // label embaixo do marcador: fade progressivo com o zoom (invisível no zoom-out,
+          // legível conforme aproxima) — não polui a vista geral
+          if (p.name) {
+            const a = Math.min(1, Math.max(0, (this.scale - 1.15) / 1.1));
+            if (a > 0.04) {
+              ctx.save();
+              ctx.globalAlpha = a;
+              ctx.fillStyle = col;
+              ctx.font = Math.round(9 + 3 * (this.scale - 1)) + "px sans-serif";
+              ctx.textAlign = "center";
+              ctx.textBaseline = "top";
+              const nm = p.name.length > 16 ? p.name.slice(0, 15) + "\u2026" : p.name;
+              ctx.fillText(nm, sx, sy + r + 3);
+              ctx.restore();
+            }
           }
         }
       }
