@@ -27,6 +27,9 @@
   let ttSuppressUntil = 0; // bloqueia a ação do toque que fecha o tooltip
   let toastTimer = null;
 
+  // cooldown real (M2): último valor renderizado por slot p/ evitar toque desnecessário no DOM
+  const cdLast = new Map(); // idx => { pct: number, active: boolean }
+
   let gridPreset = localStorage.getItem(GRID_KEY);
   if (!PRESETS[gridPreset]) gridPreset = "4x3";
 
@@ -108,8 +111,11 @@
       b.type = "button";
       b.className = "hb-slot" + (s ? "" : " empty");
       b.dataset.index = i;
+      const cdHtml = s && s.kind === "skill"
+        ? `<div class="hb-cd hidden"><div class="hb-cd-fill"></div><div class="hb-cd-txt"></div></div>`
+        : "";
       b.innerHTML = s
-        ? `<span class="hb-ico-wrap">${slotIconHtml(s)}</span><span class="hb-name">${esc(s.name || "slot")}</span>`
+        ? `<span class="hb-ico-wrap">${slotIconHtml(s)}</span><span class="hb-name">${esc(s.name || "slot")}</span>${cdHtml}`
         : `<span class="hb-ico empty">+</span>`;
       setupSlot(b, s, i);
       grid.appendChild(b);
@@ -350,6 +356,11 @@
     }
     if (editMode) { openEditor(i); return; } // editMode: editar slot preenchido nunca exige login
     if (!(window.__txState && window.__txState.loggedIn)) { status("entre no jogo primeiro"); return; }
+    // M2: skill em cooldown não executa — mostra quanto falta (ceil)
+    if (s.kind === "skill" && s.actionId != null) {
+      const c = window.__txState && window.__txState.cooldowns ? window.__txState.cooldowns[String(s.actionId)] : null;
+      if (c && c.r > 0) { status("recarrega em " + Math.ceil(c.r) + "s"); return; }
+    }
     if (s.confirm) confirmThen(s, () => fire(s, b)); else fire(s, b);
   }
 
@@ -665,11 +676,51 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { el.classList.add("hidden"); }, 2500);
   }
+
+  // ---- cooldown real (M2) ----
+  // Aplica overlay de escurecimento (altura = r/t, de baixo pra cima) + segundos restantes.
+  // Só toca no DOM quando houver mudança real (>= 1% ou ligar/desligar).
+  function applyCd(i, r, t) {
+    const b = grid.children[i];
+    if (!b) return;
+    const cd = b.querySelector(".hb-cd");
+    if (!cd) return; // apenas slots de skill têm overlay de cooldown
+    const fill = cd.querySelector(".hb-cd-fill");
+    const txt = cd.querySelector(".hb-cd-txt");
+    if (r > 0 && t > 0) {
+      cd.classList.remove("hidden");
+      fill.style.height = Math.round((r / t) * 100) + "%";
+      txt.textContent = Math.ceil(r) + "s";
+    } else {
+      cd.classList.add("hidden");
+    }
+  }
+
+  function updateCooldowns(state) {
+    if (!grid) return;
+    const cds = state && state.cooldowns ? state.cooldowns : {};
+    const total = gridTotal();
+    for (let i = 0; i < total; i++) {
+      const s = slots[i];
+      if (!s || s.kind !== "skill" || s.actionId == null) continue;
+      const c = cds[String(s.actionId)];
+      const r = c && typeof c.r === "number" ? c.r : 0;
+      const t = c && typeof c.t === "number" ? c.t : 0;
+      const active = r > 0 && t > 0;
+      const pct = active ? Math.round((r / t) * 100) : 0;
+      const prev = cdLast.get(i);
+      if (prev && prev.pct === pct && prev.active === active) continue; // sem mudança >= 1%
+      cdLast.set(i, { pct, active });
+      applyCd(i, r, t);
+    }
+  }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 
   build();
   setInterval(() => {
     const w = $("hotbar-grid");
     if (w) w.classList.toggle("offline", !(window.__txState && window.__txState.loggedIn));
+    const st = window.__txState;
+    if (st) updateCooldowns(st);
   }, 700);
 })();

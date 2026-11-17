@@ -35,6 +35,7 @@ static class SampleJson
 {
     public static string Snapshot(int i) => $$$"""
     {"type":"state","ts":1731700000000,"loggedIn":true,
+     "cooldowns":{"1":{"r":2.5,"t":4}},
      "zone":{"id":399,"name":"The Goblet"},"map":{"id":184,"name":"The Goblet"},
      "player":{"name":"Tester One","job":"DRG","level":100,"hp":300000,"maxHp":432100,"mp":9000,"maxMp":10000,
        "world":{"x":100.2,"y":12.0,"z":200.3},

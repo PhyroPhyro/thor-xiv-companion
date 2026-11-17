@@ -22,6 +22,7 @@ public sealed class ActionCatalog
 
     private uint _cachedJob = uint.MaxValue;
     private string _cachedJson = "{\"type\":\"actions\",\"items\":[]}";
+    private uint[] _cachedIds = Array.Empty<uint>();
     private string? _lastError;
 
     public ActionCatalog(IDataManager dataManager, IObjectTable objectTable, IPartyList partyList)
@@ -34,19 +35,32 @@ public sealed class ActionCatalog
     /// <summary>Thread do jogo. Reconstrói apenas quando o job mudou.</summary>
     public string GetJson()
     {
-        var job = _objectTable.LocalPlayer?.ClassJob.RowId ?? uint.MaxValue;
-        if (job == _cachedJob && _cachedJson.Length > 30) return _cachedJson;
-        _cachedJob = job;
-        _cachedJson = Build(job);
+        EnsureBuilt();
         return _cachedJson;
     }
 
+    /// <summary>IDs das actions (skills) do job atual — mesmo catálogo de /api/actions.</summary>
+    public uint[] GetActionIds()
+    {
+        EnsureBuilt();
+        return _cachedIds;
+    }
+
     public void Invalidate() => _cachedJob = uint.MaxValue;
+
+    private void EnsureBuilt()
+    {
+        var job = _objectTable.LocalPlayer?.ClassJob.RowId ?? uint.MaxValue;
+        if (job == _cachedJob && _cachedJson.Length > 30) return;
+        _cachedJob = job;
+        _cachedJson = Build(job);
+    }
 
     private string Build(uint job)
     {
         var sb = new StringBuilder(8192);
         int allowedCount = -1;
+        var ids = new List<uint>();
         sb.Append("{\"type\":\"actions\",\"job\":").Append(job).Append(",\"items\":[");
         var first = true;
         try
@@ -78,6 +92,7 @@ public sealed class ActionCatalog
                           .Append(",\"desc\":").Append(JsonSerializer.Serialize(desc))
                           .Append(",\"icon\":").Append(row.Icon)
                           .Append('}');
+                        ids.Add(row.RowId);
                     }
                     catch
                     {
@@ -91,6 +106,7 @@ public sealed class ActionCatalog
             _lastError = ex.GetType().Name + ": " + ex.Message;
             return "{\"type\":\"actions\",\"job\":" + job + ",\"items\":[],\"allowed\":" + allowedCount + ",\"error\":\"build\"}";
         }
+        _cachedIds = ids.ToArray();
         sb.Append("]}");
         if (first) return "{\"type\":\"actions\",\"job\":" + job + ",\"items\":[],\"allowed\":" + allowedCount + (_lastError != null ? ",\"lastError\":\"" + _lastError + "\"" : "") + "}";
         return sb.ToString();

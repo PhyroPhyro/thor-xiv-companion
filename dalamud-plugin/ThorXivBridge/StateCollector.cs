@@ -18,19 +18,21 @@ public sealed class StateCollector
     private readonly IDataManager _dataManager;
     private readonly IPartyList _partyList;
     private readonly IObjectTable _objectTable;
+    private readonly ActionCatalog _catalog;
     private readonly IPluginLog _log;
     private readonly ChatWatcher? _chat;
     private readonly string _bridgeVersion;
 
     private bool _loggedWarn;
 
-    public StateCollector(IClientState clientState, IDataManager dataManager, IPartyList partyList, IObjectTable objectTable, IPluginLog log, ChatWatcher? chat, string bridgeVersion)
+    public StateCollector(IClientState clientState, IDataManager dataManager, IPartyList partyList, IObjectTable objectTable, ActionCatalog catalog, IPluginLog log, ChatWatcher? chat, string bridgeVersion)
     {
         _bridgeVersion = bridgeVersion;
         _clientState = clientState;
         _dataManager = dataManager;
         _partyList = partyList;
         _objectTable = objectTable;
+        _catalog = catalog;
         _log = log;
         _chat = chat;
     }
@@ -52,6 +54,7 @@ public sealed class StateCollector
             if (!loggedIn || player == null)
             {
                 sb.Append("\"zone\":null,\"map\":null,\"player\":null,\"target\":null,\"party\":[]");
+                AppendCooldowns(sb);
                 if (_chat != null) sb.Append(",\"chat\":").Append(_chat.SnapshotJson());
                 sb.Append('}');
                 return sb.ToString();
@@ -61,6 +64,7 @@ public sealed class StateCollector
             AppendPlayer(sb, player);
             AppendTarget(sb, player);
             AppendParty(sb);
+            AppendCooldowns(sb);
             if (_chat != null) sb.Append(",\"chat\":").Append(_chat.SnapshotJson());
         }
         catch (Exception ex)
@@ -191,6 +195,46 @@ public sealed class StateCollector
             _log.Verbose($"ThorXivBridge: party indisponível ({ex.Message})");
         }
         sb.Append("]");
+    }
+
+    /// <summary>Anexa cooldowns ativos (apenas skills do job atual) ao snapshot de estado.</summary>
+    private unsafe void AppendCooldowns(System.Text.StringBuilder sb)
+    {
+        sb.Append(",\"cooldowns\":{");
+        try
+        {
+            var am = FFXIVClientStructs.FFXIV.Client.Game.ActionManager.Instance();
+            if (am != null)
+            {
+                bool first = true;
+                foreach (uint id in _catalog.GetActionIds())
+                {
+                    try
+                    {
+                        float r = am->GetRecastTime(FFXIVClientStructs.FFXIV.Client.Game.ActionType.Action, id);
+                        if (r > 0f)
+                        {
+                            float t = RecastTotal(am, id);
+                            if (!first) sb.Append(',');
+                            first = false;
+                            sb.Append('"').Append(id).Append("\":{\"r\":").Append(Fmt(r)).Append(",\"t\":").Append(Fmt(t)).Append('}');
+                        }
+                    }
+                    catch { /* ação indisponível no momento: pula */ }
+                }
+            }
+        }
+        catch { /* ActionManager indisponível: cooldowns fica vazio */ }
+        sb.Append('}');
+    }
+
+    /// <summary>Tempo total de recarga da ação (via detalhe do grupo de recarga).</summary>
+    private static unsafe float RecastTotal(FFXIVClientStructs.FFXIV.Client.Game.ActionManager* am, uint actionId)
+    {
+        var group = am->GetRecastGroup((int)FFXIVClientStructs.FFXIV.Client.Game.ActionType.Action, actionId);
+        if (group < 0) return 0f;
+        var detail = am->GetRecastGroupDetail(group);
+        return detail != null ? detail->Total : 0f;
     }
 
     private string JobAbbrev(uint classJobId)

@@ -141,6 +141,7 @@ body {
   border-radius: var(--radius); border: 2px solid var(--border);
   background: var(--panel-solid); color: var(--text); cursor: pointer;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  position: relative; /* contexto de empilhamento pro overlay de cooldown (.hb-cd) */
   transition: transform .06s, border-color .2s, box-shadow .2s;
   height: 100%; min-height: 0; /* encolhe com a grade; sem min-height fixo */
   text-shadow: var(--text-shadow);
@@ -166,6 +167,30 @@ body {
 .ico-bad .hb-ico-fb { display: inline-block; }
 .hb-ico.empty { font-size: 26px; color: var(--text-muted); }
 .hb-name { font-size: clamp(10px, 2.6vh, 11.5px); max-width: 92%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+
+/* ---- cooldown real nos slots de skill (M2) ---- */
+/* overlay com ponteiro-events none: o toque atravessa pro slot e o JS bloqueia o comando + toast */
+.hb-cd {
+  position: absolute; inset: 0;
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 2;
+  pointer-events: none;
+}
+.hb-cd.hidden { display: none !important; }
+/* escurecimento de baixo pra cima; altura = r/t (quanto mais perto de zerar, menos escuro) */
+.hb-cd-fill {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  background: var(--shadow);
+  border-top-left-radius: var(--radius); border-top-right-radius: var(--radius);
+}
+.hb-cd-txt {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  font-size: 11px; font-weight: 700;
+  color: var(--text); text-shadow: var(--text-shadow);
+  z-index: 3; pointer-events: none; white-space: nowrap;
+}
 
 #hb-editor { position: fixed; inset: 0; background: var(--backdrop); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 12px; }
 #hb-editor .hb-sheet { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); width: min(100%, 560px); max-height: 92vh; overflow-y: auto; display: flex; flex-direction: column; box-shadow: 0 -10px 30px var(--shadow); }

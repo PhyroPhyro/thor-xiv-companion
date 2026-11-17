@@ -58,9 +58,9 @@ public sealed class Plugin : IDalamudPlugin
             _config.MapsDirectory = Path.Combine(_pluginDirectory, "maps");
 
         _chatWatcher = _config.ChatEnabled ? new ChatWatcher(ChatGui) : null;
-        _collector = new StateCollector(ClientState, DataManager, PartyList, ObjectTable, Log, _chatWatcher, PluginVersion);
-        _queue = new CommandQueue(_config, msg => Log.Info("[ThorXivBridge] cmd: " + msg));
         _catalog = new ActionCatalog(DataManager, ObjectTable, PartyList);
+        _collector = new StateCollector(ClientState, DataManager, PartyList, ObjectTable, _catalog, Log, _chatWatcher, PluginVersion);
+        _queue = new CommandQueue(_config, msg => Log.Info("[ThorXivBridge] cmd: " + msg));
         _queue.TargetResolver = _catalog.ResolveTarget;
         _server = new BridgeServer(GetCachedSnapshot, _config,
             json => CommandsApi.HandleAsync(json, _config, _queue))
