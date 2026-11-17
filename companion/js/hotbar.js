@@ -1,38 +1,56 @@
-// Hotbar touch (T2/M1): 12 slots que disparam comandos/skills/sequências nativas no jogo.
+// Hotbar touch (T2/M1): grid configurável (3x3/4x3/4x4), drag & drop entre slots só em editMode,
+// tooltips de slot e execução de comandos/skills/sequências nativas no jogo.
 // POST /api/command aceita APENAS type command|skill|sequence — Telesto foi removido.
 (function () {
   "use strict";
 
   const $ = (id) => document.getElementById(id);
   const KEY = "hotbar.v1";
-  const SLOTS = 12;
+  const GRID_KEY = "hotbar.grid.v1";
+  const MAX_SLOTS = 16; // maior preset (4x4); slots além do grade atual ficam preservados na memória
+  const PRESETS = {
+    "3x3": { c: 3, r: 3, label: "3×3", n: 9 },
+    "4x3": { c: 4, r: 3, label: "4×3", n: 12 },
+    "4x4": { c: 4, r: 4, label: "4×4", n: 16 },
+  };
+
   const wrap = $("hotbar-wrap");
+  const grid = $("hotbar-grid");
 
   let slots = load();
   let editMode = false;
   let editIdx = -1;
   let selSkill = null;
-  let actionsTries = 0;
   let blockClick = false;
-
-  const TOOLTIP_MS = 400;      // long-press / hover antes de mostrar o tooltip
-  const MOVE_TOL = 10;         // px de tolerância de movimento durante o press (não cancela o toque)
-
-  // estado do tooltip único, reutilizável
   let ttOpen = false;
   let ttTimer = null;
   let ttSuppressUntil = 0; // bloqueia a ação do toque que fecha o tooltip
 
+  let gridPreset = localStorage.getItem(GRID_KEY);
+  if (!PRESETS[gridPreset]) gridPreset = "4x3";
+
+  const TOOLTIP_MS = 400; // long-press antes de mostrar o tooltip
+  const DRAG_THRESHOLD = 8; // px de movimento p/ iniciar arraste (só em editMode)
+
+  // Uma interação ativa por vez (press/tooltip/arraste/tap)
+  let pi = null; // {idx, el, s, x, y, armed, tooltipShown, dragging, src, ghost, overEl, timer}
+
   function load() {
     try {
       const d = JSON.parse(localStorage.getItem(KEY) || "null");
-      if (Array.isArray(d) && d.length === SLOTS)
+      if (Array.isArray(d))
         // Telesto foi removido: descarta slots de macro antigos
-        return d.map((s) => s && (s.kind === "command" || s.kind === "skill" || s.kind === "sequence") ? s : null);
+        return padToMax(d.map((s) => s && (s.kind === "command" || s.kind === "skill" || s.kind === "sequence") ? s : null));
     } catch (e) { /* noop */ }
-    return new Array(SLOTS).fill(null);
+    return new Array(MAX_SLOTS).fill(null);
+  }
+  function padToMax(d) {
+    const a = d.slice(0, MAX_SLOTS);
+    while (a.length < MAX_SLOTS) a.push(null);
+    return a;
   }
   function save() { localStorage.setItem(KEY, JSON.stringify(slots)); }
+  function gridTotal() { const p = PRESETS[gridPreset]; return p.c * p.r; }
 
   function skillIconUrl(icon) {
     const n = String(icon | 0).padStart(6, "0"); // 6 dígitos
@@ -44,12 +62,14 @@
       <div id="hotbar-grid"></div>
       <div class="hb-tools">
         <button id="hb-edit">Editar</button>
+        <button id="hb-config">Config</button>
         <button id="hb-export">Exportar</button>
         <button id="hb-import">Importar</button>
         <span id="hb-status" class="dim"></span>
       </div>
       <div id="hb-editor" class="hidden"></div>
       <div id="hb-confirm" class="hidden"></div>
+      <div id="hb-config" class="hidden"></div>
       <div id="hb-tooltip" class="hidden">
         <div class="hb-tooltip-card">
           <div id="hb-tt-name" class="hb-tt-name"></div>
@@ -59,23 +79,41 @@
       </div>`;
     renderGrid();
     $("hb-edit").onclick = () => { editMode = !editMode; $("hb-edit").textContent = editMode ? "Pronto" : "Editar"; closeEditor(); renderGrid(); };
+    $("hb-config").onclick = openConfig;
     $("hb-export").onclick = exportJson;
     $("hb-import").onclick = importJson;
+
+    // reconhecedor global de move/up (segue o dedo mesmo saindo do elemento do slot)
+    document.addEventListener("pointermove", onGlobalMove);
+    document.addEventListener("pointerup", onGlobalUp);
+    document.addEventListener("pointercancel", onGlobalUp);
+
+    // toque em qualquer lugar fecha o tooltip; o toque que fecha NÃO dispara a ação do elemento tocado (FFXIV)
+    document.addEventListener("pointerdown", (e) => {
+      if (!ttOpen) return;
+      hideTooltip();
+      ttSuppressUntil = Date.now() + 600;
+    }, true);
   }
 
   function renderGrid() {
-    const grid = $("hotbar-grid");
-    grid.innerHTML = "";
+    const p = PRESETS[gridPreset];
+    grid.style.gridTemplateColumns = `repeat(${p.c}, 1fr)`;
+    grid.style.gridTemplateRows = `repeat(${p.r}, 1fr)`;
     grid.className = editMode ? "editing" : "";
-    slots.forEach((s, i) => {
+    const total = gridTotal();
+    for (let i = 0; i < total; i++) {
+      const s = slots[i];
       const b = document.createElement("button");
+      b.type = "button";
       b.className = "hb-slot" + (s ? "" : " empty");
+      b.dataset.index = i;
       b.innerHTML = s
         ? `<span class="hb-ico-wrap">${slotIconHtml(s)}</span><span class="hb-name">${esc(s.name || "slot")}</span>`
         : `<span class="hb-ico empty">+</span>`;
-      attachSlot(b, s, i); // slots vazios também recebem reconhecedor de toque
+      setupSlot(b, s, i);
       grid.appendChild(b);
-    });
+    }
   }
 
   function slotIconHtml(s) {
@@ -102,55 +140,147 @@
   }
   function hideTooltip() { clearTimeout(ttTimer); ttTimer = null; const tt = $("hb-tooltip"); if (tt) tt.classList.add("hidden"); ttOpen = false; }
 
-  // toque em qualquer lugar fecha o tooltip; o toque que fecha NÃO dispara a ação do elemento tocado (FFXIV)
-  document.addEventListener("pointerdown", (e) => {
-    if (!ttOpen) return;
-    hideTooltip();
-    ttSuppressUntil = Date.now() + 600;
-  }, true);
-
-  // reconhecedor de press longo com tolerância de movimento (~10px):
-  // pequenos movimentos durante o press NÃO cancelam; apenas desvia > MOVE_TOL cancela.
-  function pressRecognizer(el, onArm) {
-    let timer = null;
-    let armed = false;
-    let px = 0, py = 0;
-    const start = (e) => {
-      if (Date.now() < ttSuppressUntil) return;
-      px = e.clientX; py = e.clientY;
-      armed = false;
-      timer = setTimeout(() => { armed = true; onArm(); }, TOOLTIP_MS);
-    };
-    const stop = () => {
-      clearTimeout(timer); timer = null;
-      const wasArmed = armed;
-      armed = false;
-      if (Date.now() < ttSuppressUntil) return false; // toque que fechou o tooltip: não dispara nada
-      if (wasArmed) { blockClick = true; setTimeout(() => blockClick = false, 600); return true; }
-      return false;
-    };
-    const cancel = () => { clearTimeout(timer); timer = null; armed = false; };
-    el.addEventListener("pointerdown", start, { passive: true });
-    el.addEventListener("pointerup", stop);
-    el.addEventListener("pointercancel", cancel);
-    el.addEventListener("pointermove", (e) => {
-      if (!timer) return;
-      if (Math.abs(e.clientX - px) > MOVE_TOL || Math.abs(e.clientY - py) > MOVE_TOL) cancel();
-    });
-    el.addEventListener("pointerenter", (ev) => { if (ev.pointerType === "mouse") start(); });
-    el.addEventListener("pointerleave", cancel);
-    return { stop };
+  function showSlotTooltip(s) {
+    let name = s.name || "", desc = "", idLine = "";
+    if (s.kind === "skill") {
+      idLine = "Action ID: " + s.actionId;
+      const cat = catalogItem(s.actionId);
+      if (cat) { desc = cat.desc || ""; if (!s.name) name = cat.name; }
+    }
+    showTooltip(name, desc, idLine);
   }
 
-  // ---- toque longo / clique nos slots ----
-  function attachSlot(b, s, i) {
-    const rec = pressRecognizer(b, s ? () => showSlotTooltip(s) : null);
-    b.addEventListener("pointerup", () => {
-      if (rec.stop()) return; // press longo mostrou/suprimiu o tooltip: não executa ação
-      tapSlot(s, i, b);
-    });
-    b.addEventListener("click", (e) => { if (blockClick) { e.stopImmediatePropagation(); blockClick = false; } });
+  // ---- reconhecedor de press do slot (tooltip vs arraste vs tap) ----
+  function setupSlot(b, s, i) {
+    b.addEventListener("pointerdown", (ev) => startPress(ev, b, s, i), { passive: true });
+    b.addEventListener("pointercancel", cancelPress);
+    b.addEventListener("click", (ev) => { if (blockClick) { ev.stopImmediatePropagation(); blockClick = false; } });
   }
+
+  function startPress(ev, b, s, i) {
+    if (Date.now() < ttSuppressUntil) return; // toque que fechou o tooltip: ignora tudo
+    if (ev.pointerType === "mouse" && ev.button !== 0) return;
+    cancelPress();
+    pi = { idx: i, el: b, s, x: ev.clientX, y: ev.clientY, armed: false, tooltipShown: false, dragging: false, src: -1, ghost: null, overEl: null, timer: null };
+    const onArm = s ? () => { showSlotTooltip(s); pi.tooltipShown = true; } : null;
+    pi.timer = setTimeout(() => {
+      pi.armed = true;
+      pi.timer = null;
+      if (onArm) onArm();
+    }, TOOLTIP_MS);
+  }
+
+  function cancelPress() {
+    if (!pi) return;
+    clearTimeout(pi.timer); pi.timer = null;
+    endDragVisuals();
+    pi = null;
+  }
+
+  function endDragVisuals() {
+    if (pi.ghost) { pi.ghost.remove(); pi.ghost = null; }
+    if (pi.overEl) { pi.overEl.classList.remove("hb-drag-over"); pi.overEl = null; }
+    if (pi.el) pi.el.classList.remove("hb-dragging");
+  }
+
+  function onGlobalMove(ev) {
+    if (!pi) return;
+    if (pi.dragging) { placeGhost(ev); updateDragOver(ev); return; }
+    if (pi.armed) return; // tooltip mostrando: prioridade, nunca vira arraste
+    const dx = Math.abs(ev.clientX - pi.x), dy = Math.abs(ev.clientY - pi.y);
+    if (dx > DRAG_THRESHOLD || dy > DRAG_THRESHOLD) {
+      clearTimeout(pi.timer); pi.timer = null;
+      pi.armed = false;
+      if (editMode && pi.s) {
+        beginDrag(ev);
+      } else {
+        cancelPress(); // fora de editMode ou slot vazio: não há arraste
+      }
+    }
+  }
+
+  function beginDrag(ev) {
+    pi.dragging = true;
+    pi.src = pi.idx;
+    pi.el.classList.add("hb-dragging");
+    const s = pi.s;
+    const url = s.kind === "skill" && s.actionIcon != null ? skillIconUrl(s.actionIcon) : "";
+    const fb = (s.kind === "skill" && s.actionIcon == null) ? (s.icon || "✦") : "";
+    const ghost = document.createElement("div");
+    ghost.id = "hb-drag-ghost";
+    ghost.className = "hidden";
+    ghost.innerHTML = `<div class="hb-drag-card"><img class="hb-drag-img" src="${url}"${url ? "" : ' style="display:none"' }><span class="hb-drag-fb">${esc(fb)}</span><span class="hb-drag-name">${esc(s.name || "slot")}</span></div>`;
+    document.body.appendChild(ghost);
+    pi.ghost = ghost;
+    placeGhost(ev);
+    ghost.classList.remove("hidden");
+    updateDragOver(ev);
+  }
+
+  function placeGhost(ev) {
+    if (!pi || !pi.ghost) return;
+    pi.ghost.style.left = ev.clientX + "px";
+    pi.ghost.style.top = ev.clientY + "px";
+  }
+
+  function updateDragOver(ev) {
+    let target = null;
+    const el = document.elementFromPoint(ev.clientX, ev.clientY);
+    const slotEl = el && el.closest ? el.closest(".hb-slot") : null;
+    if (slotEl && slotEl.dataset.index != null) {
+      const idx = +slotEl.dataset.index;
+      if (idx >= 0 && idx < gridTotal()) target = slotEl;
+    }
+    if (pi.overEl && pi.overEl !== target) pi.overEl.classList.remove("hb-drag-over");
+    pi.overEl = target;
+    if (target) target.classList.add("hb-drag-over");
+  }
+
+  function onGlobalUp(ev) {
+    if (!pi) return;
+    if (pi.dragging) { doDrop(); cleanupPress(); return; }
+    // não arrastando: pointerup num slot (ou em qualquer lugar)
+    if (pi.tooltipShown) {
+      // tooltip permanece aberto; o toque que fecha não dispara nada (suprimido abaixo no próximo pointerdown)
+      blockClick = true; setTimeout(() => blockClick = false, 600);
+      cleanupPress();
+      return;
+    }
+    // tap curto (timer não armado)
+    if (Date.now() < ttSuppressUntil) { cleanupPress(); return; }
+    clearTimeout(pi.timer); pi.timer = null;
+    tapSlot(pi.s, pi.idx, pi.el);
+    cleanupPress();
+  }
+
+  function cleanupPress() { endDragVisuals(); pi = null; }
+
+  function doDrop() {
+    const src = pi.src;
+    const over = pi.overEl ? +pi.overEl.dataset.index : -1;
+    let changed = false;
+    if (over !== -1 && over !== src && over < gridTotal()) {
+      if (slots[over] == null) {
+        // soltar em slot vazio: move (origem fica vazia)
+        slots[over] = slots[src];
+        slots[src] = null;
+        changed = true;
+      } else {
+        // soltar em slot preenchido: troca os dois
+        const tmp = slots[src];
+        slots[src] = slots[over];
+        slots[over] = tmp;
+        changed = true;
+      }
+    }
+    // soltar fora do grid ou na própria origem: cancela (sem mudança)
+    if (changed) save();
+    renderGrid();
+  }
+
+  // ---- toque curto nos slots (fluxo centralizado) ----
+  // ttSuppressUntil ativo -> todo tap ignorado.
+  // Fora disso: editMode -> editor (preenchido ou vazio); fora do editMode -> executa (preenchido) ou dica (vazio).
   function tapSlot(s, i, b) {
     if (Date.now() < ttSuppressUntil) return; // toque que fechou o tooltip: não executa ação
     blockClick = true; setTimeout(() => blockClick = false, 600);
@@ -161,15 +291,6 @@
     }
     if (!(window.__txState && window.__txState.loggedIn)) { status("entre no jogo primeiro"); return; }
     if (editMode) openEditor(i); else if (s.confirm) confirmThen(s, () => fire(s, b)); else fire(s, b);
-  }
-  function showSlotTooltip(s) {
-    let name = s.name || "", desc = "", idLine = "";
-    if (s.kind === "skill") {
-      idLine = "Action ID: " + s.actionId;
-      const cat = catalogItem(s.actionId);
-      if (cat) { desc = cat.desc || ""; if (!s.name) name = cat.name; }
-    }
-    showTooltip(name, desc, idLine);
   }
 
   // ---- confirmação ----
@@ -296,6 +417,45 @@
   function kindIcon(s) { return s.icon == null ? (s.kind === "skill" ? "✦" : "") : s.icon; }
   function closeEditor() { editIdx = -1; hideTooltip(); const el = $("hb-editor"); if (el) { el.classList.add("hidden"); el.innerHTML = ""; } }
 
+  // ---- configuracao da grade (presets) ----
+  function openConfig() {
+    const el = $("hb-config");
+    const p = PRESETS[gridPreset];
+    el.innerHTML = `
+      <div class="hb-sheet">
+        <div class="hb-sheet-head">
+          <button id="cfg-close">Fechar</button>
+          <span class="hb-sheet-title">Grade da hotbar</span>
+        </div>
+        <div class="hb-sheet-body">
+          <p class="dim">Mais slots = botoes menores</p>
+          <div class="hb-presets" id="cfg-presets"></div>
+        </div>
+      </div>`;
+    const cont = $("cfg-presets");
+    Object.keys(PRESETS).forEach((k) => {
+      const pr = PRESETS[k];
+      const bt = document.createElement("button");
+      bt.type = "button";
+      bt.className = "hb-preset-btn" + (k === gridPreset ? " sel" : "");
+      bt.dataset.preset = k;
+      bt.innerHTML = `<span class="hb-preset-big">${pr.label}</span><span class="hb-preset-small">${pr.n} slots</span>`;
+      bt.onclick = () => applyPreset(k);
+      cont.appendChild(bt);
+    });
+    el.classList.remove("hidden");
+    $("cfg-close").onclick = closeConfig;
+    el.onclick = (ev) => { if (ev.target === el) closeConfig(); };
+  }
+  function closeConfig() { $("hb-config").classList.add("hidden"); }
+  function applyPreset(k) {
+    gridPreset = k;
+    localStorage.setItem(GRID_KEY, k);
+    closeConfig();
+    renderGrid();
+    status("grade " + PRESETS[k].label + " (" + PRESETS[k].n + " slots)");
+  }
+
   // ---- import/export ----
   function exportJson() {
     const ta = document.createElement("textarea");
@@ -309,10 +469,10 @@
     if (!txt) return;
     try {
       const d = JSON.parse(txt);
-      if (!Array.isArray(d) || d.length !== SLOTS) throw 0;
-      slots = d.map((s) => s && (s.kind === "command" || s.kind === "skill" || s.kind === "sequence") ? s : null);
+      if (!Array.isArray(d)) throw 0;
+      slots = padToMax(d.map((s) => s && (s.kind === "command" || s.kind === "skill" || s.kind === "sequence") ? s : null));
       save(); renderGrid(); status("importado");
-    } catch (e) { status("JSON inválido (12 slots)"); }
+    } catch (e) { status("JSON invalido"); }
   }
 
   function splitLines(text) {
@@ -320,16 +480,17 @@
       .filter((l) => l.length && !l.startsWith("//"));
   }
 
-  // ---- skills do catálogo ----
+  // ---- skills do catalogo ----
   function loadActions(cb) {
     if (window.__txActions && window.__txActions.length) { cb && cb(); return; }
     fetch("/api/actions").then((r) => r.json()).then((d) => {
       const items = d.items || [];
       if (items.length) { window.__txActions = items; cb && cb(); return; }
       if (++actionsTries < 4) setTimeout(() => loadActions(cb), 800);
-      else { const l = $("ed-actions-list"); if (l) l.innerHTML = '<div class="dim">catálogo vazio — abra o editor novamente com o jogo em mundo</div>'; }
+      else { const l = $("ed-actions-list"); if (l) l.innerHTML = '<div class="dim">catalogo vazio — abra o editor novamente com o jogo em mundo</div>'; }
     }).catch(() => { if (++actionsTries < 4) setTimeout(() => loadActions(cb), 800); });
   }
+  let actionsTries = 0;
 
   function renderSkillList(filter) {
     const list = $("ed-actions-list");
@@ -355,11 +516,45 @@
     renderSkillList($("ed-skillq").value);
   }
 
-  // ---- tooltip genérico (long-press 400ms + hover no desktop) ----
+  // ---- tooltip generico (long-press 400ms + hover no desktop) ----
   function attachTooltip(el, name, desc, id) {
     const rec = pressRecognizer(el, () => showTooltip(name, desc, id ? "Action ID: " + id : ""));
     el.addEventListener("pointerup", () => { rec.stop(); }); // tooltip fica aberto até toque em outro lugar
     el.addEventListener("click", (e) => { if (blockClick) { e.stopImmediatePropagation(); blockClick = false; } });
+  }
+
+  // reconhecedor de press longo com tolerância de movimento (~10px):
+  // pequenos movimentos durante o press NÃO cancelam; apenas desvia > MOVE_TOL cancela.
+  // usado pelas opções da lista de skills (tooltip já funciona; mantido intocado).
+  function pressRecognizer(el, onArm) {
+    let timer = null;
+    let armed = false;
+    let px = 0, py = 0;
+    const start = (e) => {
+      if (Date.now() < ttSuppressUntil) return;
+      px = e.clientX; py = e.clientY;
+      armed = false;
+      timer = setTimeout(() => { armed = true; onArm(); }, TOOLTIP_MS);
+    };
+    const stop = () => {
+      clearTimeout(timer); timer = null;
+      const wasArmed = armed;
+      armed = false;
+      if (Date.now() < ttSuppressUntil) return false; // toque que fechou o tooltip: não dispara nada
+      if (wasArmed) { blockClick = true; setTimeout(() => blockClick = false, 600); return true; }
+      return false;
+    };
+    const cancel = () => { clearTimeout(timer); timer = null; armed = false; };
+    el.addEventListener("pointerdown", start, { passive: true });
+    el.addEventListener("pointerup", stop);
+    el.addEventListener("pointercancel", cancel);
+    el.addEventListener("pointermove", (e) => {
+      if (!timer) return;
+      if (Math.abs(e.clientX - px) > 10 || Math.abs(e.clientY - py) > 10) cancel();
+    });
+    el.addEventListener("pointerenter", (ev) => { if (ev.pointerType === "mouse") start(); });
+    el.addEventListener("pointerleave", cancel);
+    return { stop };
   }
 
   // ---- execução ----
@@ -383,7 +578,7 @@
   }
 
   function status(t) { const el = $("hb-status"); if (el) el.textContent = t || ""; }
-  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c])); }
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>\"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c])); }
 
   build();
   setInterval(() => {
