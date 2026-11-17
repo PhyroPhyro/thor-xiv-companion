@@ -47,6 +47,12 @@ Ordem sugerida: idioma+temes juntos (rodada leve), depois conexão/backup, resto
 - [ ] Pins de aetherytes/markers (dados estáticos de XIVAPI)
 - [ ] Radar de hunts (fase posterior; fonte: endpoint de hunt público)
 
+## T3.3 — POIs no mapa (parcial, 0.5.20)
+
+- [x] Infra: busca MapMarker via xivapi v2 (cursor+cache `txpoi.v1`), pipeline de projeção igual ao pino (Y_FLIP=true validado contra MapUtil), classificação por ícone (60311 aetheryte ciano, comércio dourado pronto, demais cinza sutil)
+- [x] ◎ ciclo de modos AUTO→SEGUIR(◉)→EXPLORAR(◇); pan/± caem em EXPLORAR
+- [ ] Cobertura completa: API v2 deduplica subrows → poucas zonas retornam tudo. Fonte definitiva: plugin expor marcadores via AgentMap do jogo (próxima rodada, payload `pois[]` no state)
+
 ## T4 — Tracker de quests/duty
 
 - [ ] Quest log no payload (Dalamud: `QuestManager`/Journal) — painel "quests" com tracker ativo (layout referência DS-Forever: tracked quest fixo no topo)

@@ -15,10 +15,26 @@
   const MAP_EMPTY = gv("--map-empty");
   const MAP_OFFLINE = gv("--map-offline");
 
+  // tokens de ponto de interesse (css/tokens.css)
+  const POI_AETHERYTE = gv("--poi-aetheryte");
+  const POI_COMMERCE = gv("--poi-commerce");
+  const POI_DEFAULT = gv("--poi-default");
+
+  const POI_CACHE_KEY = "txpoi.v1";
+  const POI_TIMEOUT_MS = 8000;
+  const POI_LIMIT = 100;
+
+  // Ícones observados em dados reais da sheet MapMarker (XIVAPI v2, conferido com curl).
+  // 60311 = aetheryte (confere: marca as pedras de invocação / aetherytes).
+  // Nenhum ícone de comércio/lojista apareceu nos conjuntos coletados; a classe
+  // fica definida para receber ids reais quando confirmados pelos dados.
+  const POI_AETHERYTE_ICONS = new Set([60311]);
+  const POI_COMMERCE_ICONS = new Set();
+
   const MAP_CACHE_KEY = "txmap.v1";
   const RESOLVE_TIMEOUT_MS = 6000;
   const XIVAPI_BASE = "https://v2.xivapi.com";
-  const Y_FLIP = false; // v. teste de marco: true se norte-sul espelhado na imagem do xivapi
+  const Y_FLIP = true; // v. teste de marco: true se norte-sul espelhado na imagem do xivapi
 
   const ZOOM_STEP = 1.6;
   const ZOOM_MIN = 1;
@@ -51,6 +67,7 @@
       this.autoFrame = true;   // enquadra a área onde o player anda (média + spread do buffer); off em pan/zoom manual
       this.buf = [];           // últimas coords da zona
       this.lastPos = null;
+      this.pois = null; // marcadores da zona atual (null = ainda não carregados; [] = nenhum)
 
       this.bindHUD();
       this.bindInput();
@@ -67,6 +84,7 @@
         this.resolved = null;
         this.loading = false;
         this.pendingZoneId = null;
+        this.pois = null;
         return;
       }
       if (this.zoneId === zoneId) {
@@ -89,8 +107,13 @@
       this.buf = [];
       this.manualAnchor = null;
       this.lastPos = null;
+      this.pois = null; // troca de zona: limpa marcadores antigos imediatamente, nunca POI de zona errada
       await this.resolveAndLoad(zoneId);
       this.loading = false;
+      // a zona pode ter trocado enquanto a rede aguardava
+      if (this.pendingZoneId !== zoneId) return;
+      // pontos de interesse da zona: 1 HTTP por página, cache em localStorage, falha silenciosa
+      if (this.resolved && this.resolved.rowId) await this.loadPois(this.resolved.rowId);
     }
 
     async resolveAndLoad(zoneId) {
@@ -120,7 +143,7 @@
       } catch (e) { /* localStorage indisponível — segue sem cache */ }
       const hit = cache[zoneId];
       if (hit && hit.key && hit.sf && hit.sf.x && hit.sf.y)
-        return { key: hit.key, index: hit.index || "00", sf: hit.sf };
+        return { key: hit.key, index: hit.index || "00", sf: hit.sf, rowId: hit.rowId };
 
       // 2) XIVAPI v2: busca a linha da sheet Map cujo TerritoryType == zone.id
       const controller = new AbortController();
@@ -144,6 +167,7 @@
       // preferir a linha principal "/00" (mapa completo da zona); sub-rotinas /01+ são recortes
       let row = results.find((r) => { const idv = (r.fields || {}).Id; const t = idv && idv.value !== undefined ? idv.value : idv; return String(t || "").endsWith("/00"); }) || results[0];
       if (!row) return null;
+      const rowId = row.row_id; // row_id da linha Map: chave da busca de marcadores (DataKey)
       const fields = row.fields || {};
       const idv = fields.Id;
       const idStr = idv && idv.value !== undefined ? idv.value : idv;
@@ -154,9 +178,9 @@
       const sf = Number.isFinite(sfv) && sfv > 0 ? { x: sfv, y: sfv } : null;
       // Id vem no formato "s1d1/00" (sheetKey/index); index "00" default
       const parts = String(idStr).split("/");
-      const resolved = { key: parts[0], index: parts[1] || "00", sf };
+      const resolved = { key: parts[0], index: parts[1] || "00", sf, rowId };
 
-      // grava no cache para a próxima troca de zona
+      // grava no cache para a próxima troca de zona (rowId incluído)
       try {
         cache[zoneId] = resolved;
         localStorage.setItem(MAP_CACHE_KEY, JSON.stringify(cache));
@@ -182,6 +206,63 @@
         this.SF = (resolved && resolved.sf) ? resolved.sf : { x: 100, y: 100 };
         this.buf = []; this.manualAnchor = null; if (this.autoFrame) { this.scale = ZOOM_MIN; }
       }
+    }
+
+    // Busca os marcadores da sheet MapMarker para o mapa da zona (rowId da linha Map).
+    // 1 HTTP por página; segue o cursor `next` até esgotar. Timeout 8s, falha silenciosa.
+    // Resultado: this.pois = [{x, y, icon, name}] em valores brutos da API (X,Y ~0..1024),
+    // cache em localStorage (txpoi.v1) chaveado por mapRowId.
+    async loadPois(mapRowId) {
+      if (this.pois != null) return; // já carregado (ou tentativa feita) para esta zona
+      let cache = {};
+      try {
+        cache = JSON.parse(localStorage.getItem(POI_CACHE_KEY) || "{}");
+      } catch (e) { /* localStorage indisponível — segue sem cache */ }
+      const hit = cache[mapRowId];
+      if (hit) { this.pois = hit; return; }
+
+      const pois = [];
+      let cursor = null;
+      for (let pages = 0; pages < 8; pages++) { // freio de segurança; esgota via cursor `next`
+        let url =
+          XIVAPI_BASE +
+          "/api/search?sheets=MapMarker&fields=X,Y,Icon,PlaceNameSubtext.Name&query=" +
+          encodeURIComponent("DataKey=" + mapRowId) +
+          "&limit=" + POI_LIMIT;
+        if (cursor) url += "&cursor=" + encodeURIComponent(cursor);
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), POI_TIMEOUT_MS);
+        let data;
+        try {
+          const r = await fetch(url, { signal: controller.signal });
+          if (!r.ok) break;
+          data = await r.json();
+        } catch (e) {
+          break; // falha silenciosa: sem POIs nesta zona
+        } finally {
+          clearTimeout(timer);
+        }
+        const results = data.results || data.rows || [];
+        for (const res of results) {
+          const f = res.fields || {};
+          if (!f.Icon || !f.Icon.id) continue; // sem ícone: não desenha nada
+          const x = Number(f.X), y = Number(f.Y);
+          if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+          pois.push({
+            x: x, y: y,
+            icon: Number(f.Icon.id),
+            name: (f.PlaceNameSubtext && f.PlaceNameSubtext.fields && f.PlaceNameSubtext.fields.Name) || ""
+          });
+        }
+        cursor = data.next;
+        if (!cursor || results.length < POI_LIMIT) break; // esgotou
+      }
+
+      this.pois = pois; // [] quando não há marcadores ou a busca falhou
+      try {
+        cache[mapRowId] = pois;
+        localStorage.setItem(POI_CACHE_KEY, JSON.stringify(cache));
+      } catch (e) { /* sem cache — segue sem gravar */ }
     }
 
     // ---- viewport ----
@@ -378,6 +459,44 @@
         }
       }
       ctx.textAlign = "start";
+
+      // pontos de interesse: mesma projeção do pino do player (xImg/yImg),
+      // desenhados antes dele; v1 puramente visual, sem hit-testing/toque
+      if (this.pois && this.img) {
+        for (const p of this.pois) {
+          // Hipótese H (validada): coord = px2048/SF*2 + 1 com px2048 = 2*X (origem baixo-esquerda)
+          const cx = 4 * p.x / this.SF.x + 1;
+          const cy = 4 * p.y / this.SF.y + 1;
+          const px = this.xImg(cx);
+          const py = this.yImg(cy);
+          const sx = W / 2 + (px - cx_img) * s_eff;
+          const sy = H / 2 + (py - cy_img) * s_eff;
+          if (sx < -24 || sx > W + 24 || sy < -24 || sy > H + 24) continue;
+          const kind = POI_AETHERYTE_ICONS.has(p.icon) ? "aetheryte"
+            : (POI_COMMERCE_ICONS.has(p.icon) ? "commerce" : "default");
+          const r = kind === "commerce" ? 4 : (kind === "aetheryte" ? 7 : 3);
+          ctx.beginPath();
+          if (kind === "aetheryte") {
+            // losango
+            ctx.moveTo(sx, sy - r); ctx.lineTo(sx + r, sy);
+            ctx.lineTo(sx, sy + r); ctx.lineTo(sx - r, sy); ctx.closePath();
+          } else {
+            ctx.arc(sx, sy, r, 0, Math.PI * 2);
+          }
+          ctx.fillStyle = kind === "aetheryte" ? POI_AETHERYTE
+            : (kind === "commerce" ? POI_COMMERCE : POI_DEFAULT);
+          ctx.fill();
+          if (kind === "aetheryte") {
+            ctx.lineWidth = 1; ctx.strokeStyle = MAP_PIN_STROKE; ctx.stroke();
+          }
+          // rótulo curto apenas com zoom razoável
+          if (kind === "aetheryte" && this.scale >= 2 && p.name) {
+            ctx.fillStyle = POI_AETHERYTE;
+            ctx.font = "10px sans-serif";
+            ctx.fillText(p.name.length > 14 ? p.name.slice(0, 13) + "\u2026" : p.name, sx + r + 5, sy + 4);
+          }
+        }
+      }
 
       // pino do player: projeta SEMPRE que houver coords (mesmo com auto/follow desligados)
       if (this.lastCoords) {

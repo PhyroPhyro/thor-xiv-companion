@@ -47,4 +47,9 @@
   --map-pin-stroke: #1c1c1c;
   --map-empty: rgba(216, 227, 243, 0.35);
   --map-offline: rgba(207, 176, 97, 0.5);
+
+/* -- pontos de interesse no mapa (lidos em js/map.js via getComputedStyle) -- */
+--poi-aetheryte: #22d3ee;      /* ciano — aetheryte/aethernet */
+--poi-commerce: var(--gold);   /* dourado — comércio/lojistas */
+--poi-default: #7d8ea8;        /* cinza sutil — demais (portões, fontes, etc.) */
 }
