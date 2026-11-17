@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deploy do plugin no PC (FFXIV): copia o zip do dist e troca o DLL em C:\Tools\ThorXivBridge.
-# Uso: scripts/deploy-pc.sh dist/ThorXivBridge-<versao>.zip
+# Uso: scripts/deploy-pc.sh dist/ThorXivBridge-<versao>.zip [dist/thorxiv-companion-<v>.apk]
 # Requer: ssh phyro@192.168.15.194 (chave id_ed25519_omv), zip com ThorXivBridge.dll na raiz.
 set -euo pipefail
 
@@ -35,3 +35,8 @@ Write-Output ('HASH: ' + (Get-FileHash \"\$dest/ThorXivBridge.dll\" -Algorithm S
 "
 echo "== hash local (conferir com HASH acima) =="
 unzip -p "$ZIP" ThorXivBridge.dll | sha256sum | awk '{print "HASH-LOCAL: " toupper($1)}'
+
+if [ -n "${2:-}" ]; then
+  echo "== Thor (se conectado ao PC) =="
+  "$(dirname "$0")/deploy-thor.sh" "$2" || echo "AVISO: deploy-thor falhou (ignorado)"
+fi
