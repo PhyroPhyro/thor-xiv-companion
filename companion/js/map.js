@@ -45,6 +45,8 @@
       this.cx = 50;            // centro do viewport
       this.cy = 50;
       this.follow = true;      // recentra no player a cada coords novo (desligado pelo ◎ ou arraste/zoom manual)
+      this.SF = { x: 100, y: 100 }; // SizeFactor da linha Map: px de textura por unidade de coord via (imgW/2.54)/SF
+      this.lastCoords = null;  // últimas coords vistas (projeção do pino mesmo em modo manual parado)
       this.autoFrame = true;   // enquadra a área onde o player anda (média + spread do buffer); off em pan/zoom manual
       this.buf = [];           // últimas coords da zona
       this.lastPos = null;
@@ -83,6 +85,7 @@
       this.follow = true;
       this.autoFrame = true;
       this.buf = [];
+      this.manualAnchor = null;
       this.lastPos = null;
       await this.resolveAndLoad(zoneId);
       this.loading = false;
@@ -114,7 +117,8 @@
         cache = JSON.parse(localStorage.getItem(MAP_CACHE_KEY) || "{}");
       } catch (e) { /* localStorage indisponível — segue sem cache */ }
       const hit = cache[zoneId];
-      if (hit && hit.key) return { key: hit.key, index: hit.index || "00" };
+      if (hit && hit.key && hit.sf && hit.sf.x && hit.sf.y)
+        return { key: hit.key, index: hit.index || "00", sf: hit.sf };
 
       // 2) XIVAPI v2: busca a linha da sheet Map cujo TerritoryType == zone.id
       const controller = new AbortController();
@@ -123,7 +127,7 @@
       try {
         const url =
           XIVAPI_BASE +
-          "/api/search?sheets=Map&fields=Id&query=" +
+          "/api/search?sheets=Map&fields=Id,SizeFactor&query=" +
           encodeURIComponent("TerritoryType=" + zoneId);
         const r = await fetch(url, { signal: controller.signal });
         if (!r.ok) return null;
@@ -135,15 +139,20 @@
       }
 
       const results = data.results || data.rows || [];
-      const row = results[0];
+      // preferir a linha principal "/00" (mapa completo da zona); sub-rotinas /01+ são recortes
+      let row = results.find((r) => { const idv = (r.fields || {}).Id; const t = idv && idv.value !== undefined ? idv.value : idv; return String(t || "").endsWith("/00"); }) || results[0];
       if (!row) return null;
       const fields = row.fields || {};
       const idv = fields.Id;
       const idStr = idv && idv.value !== undefined ? idv.value : idv;
       if (!idStr) return null;
+      // SizeFactor: v2 devolve a coluna inteira (numero em muitos jobs, ou {value:N} — aceitar ambos)
+      let sfv = fields.SizeFactor;
+      if (sfv && typeof sfv === "object" && sfv.value !== undefined) sfv = sfv.value;
+      const sf = Number.isFinite(sfv) && sfv > 0 ? { x: sfv, y: sfv } : null;
       // Id vem no formato "s1d1/00" (sheetKey/index); index "00" default
       const parts = String(idStr).split("/");
-      const resolved = { key: parts[0], index: parts[1] || "00" };
+      const resolved = { key: parts[0], index: parts[1] || "00", sf };
 
       // grava no cache para a próxima troca de zona
       try {
@@ -168,6 +177,8 @@
         this.img = img;
         this.imgW = img.naturalWidth || 100;
         this.imgH = img.naturalHeight || 100;
+        this.SF = (resolved && resolved.sf) ? resolved.sf : { x: 100, y: 100 };
+        this.buf = []; this.manualAnchor = null; if (this.autoFrame) { this.scale = ZOOM_MIN; }
       }
     }
 
@@ -176,24 +187,29 @@
     // Limita o centro para que a textura nunca saia da tela: quando o recorte é
     // menor que a textura (zoom > 1), o centro pode rodar até as bordas da imagem;
     // quando a imagem já cabe inteira (scale 1), o centro fica travado ao meio.
+    // CANÔNICO (xivapi/ffxiv-datamining MapCoordinates.md): coord = px/SF*2 + 1 na textura 2048.
+    // px = (coord-1)*SF/2 ; pino y-invertido (norte topo). Escala por imgW/2048 p/ variações de asset.
+    xImg(x) { return (x - 1) * (this.SF.x / 2) * (this.imgW / 2048); }
+    yImg(y) { return this.imgH - (y - 1) * (this.SF.y / 2) * (this.imgH / 2048); }
+    imgXToCoord(px) { return px * 2 / this.SF.x * (2048 / this.imgW) + 1; }
+    imgYToCoord(py) { return (this.imgH - py) * 2 / this.SF.y * (2048 / this.imgH) + 1; }
+
     clamp() {
       const c = this.canvas;
       const W = c.width, H = c.height;
       const iw = this.imgW, ih = this.imgH;
-      const fit = this.img ? Math.min(W / iw, H / ih) : Math.min(W / iw, H / ih);
+      const fit = Math.min(W / iw, H / ih);
       const s_eff = this.scale * fit;
       const vx = W / (2 * s_eff); // metade da largura visível em px de textura
-      const vy = H / (2 * s_eff); // metade da altura visível em px de textura
-      let minX = vx, maxX = iw - vx;
-      if (minX > maxX) { minX = maxX = iw / 2; }
-      let minY = vy, maxY = ih - vy;
-      if (minY > maxY) { minY = maxY = ih / 2; }
-      const cx_img = Math.min(Math.max((this.cx / 100) * iw, minX), maxX);
-      const cy_img = Math.min(Math.max(((100 - this.cy) / 100) * ih, minY), maxY);
-      this.cx = (cx_img / iw) * 100;
-      this.cy = 100 - (cy_img / ih) * 100;
-      this.cx = Math.min(Math.max(this.cx, 0), 100);
-      this.cy = Math.min(Math.max(this.cy, 0), 100);
+      const vy = H / (2 * s_eff);
+      let minX = vx, maxX = Math.max(vx, iw - vx);
+      let minY = vy, maxY = Math.max(vy, ih - vy);
+      const cx_img = Math.min(Math.max(this.xImg(this.cx), minX), maxX);
+      const cy_img = Math.min(Math.max(this.yImg(this.cy), minY), maxY);
+      this.cx = this.imgXToCoord(cx_img);
+      this.cy = this.imgYToCoord(cy_img);
+      this.cx = Math.min(Math.max(this.cx, 1), this.imgXToCoord(this.imgW));
+      this.cy = Math.min(Math.max(this.cy, 1), this.imgYToCoord(0));
     }
 
     // Muda o zoom, opcionalmente fixando o ponto da tela (aboutX, aboutY) sobre o
@@ -210,26 +226,26 @@
         return;
       }
       const s_eff = this.scale * fit;
-      const cx_img = (this.cx / 100) * iw;
-      const cy_img = ((100 - this.cy) / 100) * ih;
+      const cx_img = this.xImg(this.cx);
+      const cy_img = this.yImg(this.cy);
       // ponto do mapa sob o ponto da tela, antes da mudança
       const ux = cx_img + (aboutX - W / 2) / s_eff;
       const uy = cy_img + (aboutY - H / 2) / s_eff;
       this.scale = next;
       const s2 = this.scale * fit;
       // novo centro de modo a manter (ux, uy) projetado em (aboutX, aboutY)
-      this.cx = (ux - (aboutX - W / 2) / s2) / iw * 100;
-      this.cy = 100 - (uy - (aboutY - H / 2) / s2) / ih * 100;
+      this.cx = this.imgXToCoord(ux - (aboutX - W / 2) / s2);
+      this.cy = this.imgYToCoord(uy - (aboutY - H / 2) / s2);
       this.clamp();
     }
 
+    // +/− só mudam o fator de zoom; o enquadramento continua acompanhando o player
+    // (autoFrame ligado; se desligado antes, mantém-se a ancora manual que anda com o player)
     zoomIn() {
-      this.autoFrame = false;
       this.setScale(this.scale * ZOOM_STEP, this.canvas.width / 2, this.canvas.height / 2);
     }
 
     zoomOut() {
-      this.autoFrame = false;
       this.setScale(this.scale / ZOOM_STEP, this.canvas.width / 2, this.canvas.height / 2);
     }
 
@@ -237,6 +253,7 @@
       this.follow = true;
       this.autoFrame = true;
       this.buf = [];
+      this.manualAnchor = null;
       this.syncFollowBtn();
     }
 
@@ -254,8 +271,9 @@
       const iw = this.imgW, ih = this.imgH;
       const fit = this.img ? Math.min(c.width / iw, c.height / ih) : Math.min(c.width / iw, c.height / ih);
       const s_eff = this.scale * fit;
-      this.cx -= dx * 100 / (iw * s_eff);
-      this.cy += dy * 100 / (ih * s_eff);
+      this.cx -= dx * (2 / this.SF.x) * (2048 / iw) / s_eff;
+      this.cy += dy * (2 / this.SF.y) * (2048 / ih) / s_eff;
+      this.manualAnchor = this.lastCoords ? { x: this.lastCoords.x, y: this.lastCoords.y } : null;
       this.clamp();
       this.syncFollowBtn();
     }
@@ -268,10 +286,9 @@
       const fit = this.img ? Math.min(W / iw, H / ih) : Math.min(W / iw, H / ih);
       const s_eff = this.scale * fit;
 
-      // auto-enquadramento: viewport sobre a área percorrida (mapa parado, pino visivelmente móvel)
       if (mapCoords) {
         const pt = { x: mapCoords.x, y: mapCoords.y };
-        if (this.lastPos && Math.abs(pt.x - this.lastPos.x) + Math.abs(pt.y - this.lastPos.y) > 25) this.buf = []; // teleporte
+        if (this.lastPos && Math.abs(pt.x - this.lastPos.x) + Math.abs(pt.y - this.lastPos.y) > 25) { this.buf = []; this.cx = pt.x; this.cy = pt.y; } // teleporte re-ancora
         this.lastPos = pt;
         this.buf.push(pt);
         if (this.buf.length > 90) this.buf.shift();
@@ -280,20 +297,30 @@
           for (const b of this.buf) { mx += b.x; my += b.y; }
           mx /= this.buf.length; my /= this.buf.length;
           let dev = 0;
-          for (const b of this.buf) dev = Math.max(dev, Math.abs(b.x - mx), Math.abs(b.y - my));
-          const target = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, 40 / Math.max(dev, 3)));
-          this.scale += (target - this.scale) * 0.08;
+          for (const b of this.buf) dev = Math.max(dev, Math.abs(b.x - mx) * (this.SF.x / 2), Math.abs(b.y - my) * (this.SF.y / 2)); // spread em px
+          // alvo: ver ~600px de textura do andar de 90s; clampado a um zoom local baixo por pedido do dono
+          const target = Math.min(2.5, Math.max(ZOOM_MIN, 600 / Math.max(dev, 60)));
+          this.scale += (target - this.scale) * 0.12;
           this.cx += (mx - this.cx) * 0.15;
           this.cy += (my - this.cy) * 0.15;
         } else if (this.follow) {
           this.cx = mapCoords.x;
           this.cy = mapCoords.y;
+        } else if (this.manualAnchor) {
+          // modo manual: o centro anda com o player mantendo a posição relativa na tela (pino nunca sai/para)
+          this.cx += mapCoords.x - this.manualAnchor.x;
+          this.cy += mapCoords.y - this.manualAnchor.y;
         }
+        this.manualAnchor = { x: mapCoords.x, y: mapCoords.y };
+        this.lastCoords = pt;
+      } else {
+        this.manualAnchor = null;
+        this.lastCoords = null; // sem dados: sem pino (evita fantasma congelado no logout)
       }
       this.clamp();
 
-      const cx_img = (this.cx / 100) * iw;
-      const cy_img = ((100 - this.cy) / 100) * ih; // norte = topo da textura
+      const cx_img = this.xImg(this.cx);
+      const cy_img = this.yImg(this.cy);
 
       ctx.save();
       ctx.setTransform(s_eff, 0, 0, s_eff, W / 2 - s_eff * cx_img, H / 2 - s_eff * cy_img);
@@ -310,10 +337,11 @@
       // grade: linha a cada 10 unidades de coord de mapa, recortada pelos limites do canvas
       ctx.strokeStyle = MAP_GRID;
       ctx.lineWidth = 1 / s_eff;
-      for (let m = 0; m <= 100; m += GRID_STEP) {
-        const x = (m / 100) * iw;
+      const gridMax = Math.ceil(Math.max(this.imgXToCoord(iw), 100) / GRID_STEP) * GRID_STEP;
+      for (let m = 0; m <= gridMax; m += GRID_STEP) {
+        const x = this.xImg(m);
         ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, ih); ctx.stroke();
-        const y = ((100 - m) / 100) * ih;
+        const y = this.yImg(m);
         ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(iw, y); ctx.stroke();
       }
       ctx.restore();
@@ -322,13 +350,13 @@
       ctx.fillStyle = MAP_LABEL;
       ctx.font = "12px sans-serif";
       ctx.textBaseline = "middle";
-      for (let m = 0; m <= 100; m += GRID_STEP) {
-        const sx = W / 2 + ((m / 100) * iw - cx_img) * s_eff; // linha vertical x = m
+      for (let m = 0; m <= gridMax; m += GRID_STEP) {
+        const sx = W / 2 + (this.xImg(m) - cx_img) * s_eff; // linha vertical x = m
         if (sx >= 0 && sx <= W) {
           ctx.textAlign = "center";
           ctx.fillText(String(m), sx, 16);
         }
-        const sy = H / 2 + (((100 - m) / 100) * ih - cy_img) * s_eff; // linha horizontal y = m
+        const sy = H / 2 + (this.yImg(m) - cy_img) * s_eff; // linha horizontal y = m
         if (sy >= 0 && sy <= H) {
           ctx.textAlign = "start";
           ctx.fillText(String(m), 10, sy);
@@ -336,10 +364,10 @@
       }
       ctx.textAlign = "start";
 
-      // pino do player: coordenadas reais, nunca somado (fica na tela por causa do clamp do centro)
-      if (mapCoords) {
-        const px = (mapCoords.x / 100) * iw;
-        const py = ((100 - mapCoords.y) / 100) * ih;
+      // pino do player: projeta SEMPRE que houver coords (mesmo com auto/follow desligados)
+      if (this.lastCoords) {
+        const px = this.xImg(this.lastCoords.x);
+        const py = this.yImg(this.lastCoords.y);
         const sx = W / 2 + (px - cx_img) * s_eff;
         const sy = H / 2 + (py - cy_img) * s_eff;
         ctx.beginPath();
@@ -402,7 +430,7 @@
           panX = e.touches[0].clientX;
           panY = e.touches[0].clientY;
         }
-        this.follow = false; this.autoFrame = false;
+        this.follow = false; this.manualAnchor = this.lastCoords ? { x: this.lastCoords.x, y: this.lastCoords.y } : null; this.autoFrame = false;
         e.preventDefault();
       }, { passive: false });
 
@@ -427,7 +455,7 @@
         if (e.button !== 0) return;
         panX = e.clientX;
         panY = e.clientY;
-        this.follow = false; this.autoFrame = false;
+        this.follow = false; this.manualAnchor = this.lastCoords ? { x: this.lastCoords.x, y: this.lastCoords.y } : null; this.autoFrame = false;
       });
       c.addEventListener("mousemove", (e) => {
         if (panX == null) return;

@@ -61,6 +61,12 @@ README.md e no vault (`4. Projetos/Thor XIV Companion`).
   começava). Regra: em lista rolável NUNCA `touch-action:none` no item; usar touch events com
   `touchmove passive:false` e padrão hold-then-drag — pan imediato deixa o browser rolar; segurar ~250ms
   → `preventDefault` dali em diante → mover = drag; mover antes do arm = cancelar gesto próprio.
+- **Geometria de mapa FFXIV é oficial, não intuição** (0.5.18): `coord = px/SF*2 + 1` sobre a textura
+  2048 (xivapi/ffxiv-datamining MapCoordinates.md). SizeFactor da linha Map define o SPAN de coords da
+  zona (cidades: SF 200–400 → coords 1..21/1..11; campo: SF 100 → 1..42) — por isso coordenada "8,8"
+  em Idyllshire é centro-oeste, não canto. px=(coord−1)·SF/2; y invertido (norte topo). Ao resolver a
+  linha Map via search, PREFERIR Id terminado em "/00" (linha principal; /01+ são recortes com SF
+  diferente). Nunca reinventar a fórmula: consultar o doc/código XIVMap/XIVApp.
 - **AYN Thor: a tela de baixo é do vendor** (0.4.19): `rip.moth.cocoonshell/.ExternalDisplayActivity`
   segura o display de apresentação (id 4); activity nossa aberta na tela de CIMA é morta por ele em
   ~4s (o "pisca instantâneo" nunca foi crash de onCreate — foi kill do vendor + RejectedExecution no
