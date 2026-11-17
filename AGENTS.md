@@ -60,6 +60,12 @@ README.md e no vault (`4. Projetos/Thor XIV Companion`).
   começava). Regra: em lista rolável NUNCA `touch-action:none` no item; usar touch events com
   `touchmove passive:false` e padrão hold-then-drag — pan imediato deixa o browser rolar; segurar ~250ms
   → `preventDefault` dali em diante → mover = drag; mover antes do arm = cancelar gesto próprio.
+- **Zip do plugin: sempre do output real do build** (v0.5.7): existiam DOIS `latest.zip` — o velho
+  `bin/Release/latest.zip` (congelado no 0.5.1) e o correto `bin/Release/ThorXivBridge/latest.zip`
+  (gerado a cada build). Copiei o velho 5 rodadas seguidas; o PC rodava 0.5.1 com DLL nova só no disco
+  de espera. Regra: zip = `bin/Release/ThorXivBridge/latest.zip`; após deploy, conferir no PC o
+  `AssemblyVersion` do `ThorXivBridge.json` E o tamanho/hash do DLL — hash local que casa com zip velho
+  não prova nada.
 - **Re-render = limpar antes de appendChild** (v0.5.6): `renderGrid()` sem `innerHTML = ""`
   acumulava os slots a cada chamada (grid duplicava e "embaralhava" ao alternar Editar/Pronto).
   Regra: toda função de render limpa o contêiner antes de recriar.
