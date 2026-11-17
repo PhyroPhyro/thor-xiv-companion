@@ -97,8 +97,8 @@ body {
 #party-list .bar { width: 45%; }
 #party-list li.offline { opacity: .4; }
 
-/* aba Chat: log rolável + barra de envio fixa fora da área de scroll */
-#tab-chat { display: flex; flex-direction: column; height: 100%; }
+/* aba Chat: log rolável + barra de envio fixa (SÓ quando ativa — id vence .tab.active em especificidade) */
+#tab-chat.active { display: flex; flex-direction: column; height: 100%; }
 #chat-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 #chat-log { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 12px; font-size: 14px; }
 #chat-send-bar { border-top: 1px solid var(--border-inner); background: var(--panel); padding: 8px 12px; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }

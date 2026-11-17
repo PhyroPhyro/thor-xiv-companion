@@ -197,7 +197,8 @@ public sealed class StateCollector
         sb.Append("]");
     }
 
-    /// <summary>Anexa cooldowns ativos (apenas skills do job atual) ao snapshot de estado.</summary>
+    /// <summary>Anexa cooldowns ativos (apenas skills do job atual) ao snapshot de estado.
+    /// FFXIVCS: GetRecastTime = TOTAL da recarga; GetRecastTimeElapsed = decorrido; restante = total - decorrido.</summary>
     private unsafe void AppendCooldowns(System.Text.StringBuilder sb)
     {
         sb.Append(",\"cooldowns\":{");
@@ -211,13 +212,14 @@ public sealed class StateCollector
                 {
                     try
                     {
-                        float r = am->GetRecastTime(FFXIVClientStructs.FFXIV.Client.Game.ActionType.Action, id);
+                        float total = am->GetRecastTime(FFXIVClientStructs.FFXIV.Client.Game.ActionType.Action, id);
+                        if (total <= 0f) continue;
+                        float r = total - am->GetRecastTimeElapsed(FFXIVClientStructs.FFXIV.Client.Game.ActionType.Action, id);
                         if (r > 0f)
                         {
-                            float t = RecastTotal(am, id);
                             if (!first) sb.Append(',');
                             first = false;
-                            sb.Append('"').Append(id).Append("\":{\"r\":").Append(Fmt(r)).Append(",\"t\":").Append(Fmt(t)).Append('}');
+                            sb.Append('"').Append(id).Append("\":{\"r\":").Append(Fmt(r)).Append(",\"t\":").Append(Fmt(total)).Append('}');
                         }
                     }
                     catch { /* ação indisponível no momento: pula */ }
@@ -226,15 +228,6 @@ public sealed class StateCollector
         }
         catch { /* ActionManager indisponível: cooldowns fica vazio */ }
         sb.Append('}');
-    }
-
-    /// <summary>Tempo total de recarga da ação (via detalhe do grupo de recarga).</summary>
-    private static unsafe float RecastTotal(FFXIVClientStructs.FFXIV.Client.Game.ActionManager* am, uint actionId)
-    {
-        var group = am->GetRecastGroup((int)FFXIVClientStructs.FFXIV.Client.Game.ActionType.Action, actionId);
-        if (group < 0) return 0f;
-        var detail = am->GetRecastGroupDetail(group);
-        return detail != null ? detail->Total : 0f;
     }
 
     private string JobAbbrev(uint classJobId)

@@ -158,12 +158,12 @@
   }
 
   // ---- reconhecedor de press do slot ----
-  // TOUCH (WebView/Thor): fora do editMode, segurar 400ms parado em slot preenchido -> tooltip.
-  // Em editMode: sem hold/tooltip; mover > DRAG_THRESHOLD em slot preenchido -> beginDrag imediato
-  // (preventDefault nos touchmoves seguintes). Sem editMode e com movimento -> nada (aba sem scroll).
-  // Tap curto sem movimento -> editMode? openEditor : tapSlot (executar).
+  // TOUCH (WebView/Thor): segurar 400ms parado em slot preenchido -> tooltip (ambos os modos).
+  // Mover alem de TOUCH_SLOP(16px): editMode+cheio -> drag imediato (tooltip aberto cede lugar);
+  // demais casos -> nada (a aba nao rola). Tap curto (<=slop) -> editMode? openEditor : executar.
+  // Jitter de dedo NUNCA engole o tap (limite generoso + rede de seguranca no touchend).
   // MOUSE (pointer events): fluxo atual (drag por movimento > 8px em editMode; tooltip com hold fora do editMode).
-  const HOLD_DRAG_MS = 250;
+  const TOUCH_SLOP = 16; // px: abaixo do jitter real de dedo em tela capacitiva
   function setupSlot(b, s, i) {
     b.addEventListener("touchstart", (ev) => startTouch(ev, b, s, i), { passive: true });
     b.addEventListener("pointerdown", (ev) => { if (ev.pointerType === "mouse") startPress(ev, b, s, i); });
@@ -194,8 +194,9 @@
     const t = ev.changedTouches[0];
     pi = makePi(i, b, s, t.clientX, t.clientY, true);
     pi.touchId = t.identifier;
-    if (!editMode && s) {
-      // so fora do editMode o hold gera tooltip; em editMode nao tem hold nem tooltip
+    pi.t0 = Date.now(); pi.maxDist = 0;
+    if (s) {
+      // segurar parado abre o tooltip em AMBOS os modos (editMode: mover depois ainda vira drag)
       pi.timer = setTimeout(() => {
         if (!pi) return;
         pi.holdArmed = true; pi.timer = null;
@@ -237,14 +238,22 @@
     if (!pi || !pi.touch) return;
     const t = touchById(ev.changedTouches, pi.touchId);
     if (!t) return;
-    if (pi.dragging) { ev.preventDefault(); placeGhost(t); updateDragOver(t); return; }
     const dx = Math.abs(t.clientX - pi.x), dy = Math.abs(t.clientY - pi.y);
-    if (dx > DRAG_THRESHOLD || dy > DRAG_THRESHOLD) pi.moved = true;
-    if (pi.moved && !pi.dragging) {
-      if (editMode && pi.s) { ev.preventDefault(); beginDrag(t); } // arraste imediato, sem hold
-      else { cancelPress(); return; } // sem editMode ou slot vazio: nada (aba nao rola)
+    const dist = Math.max(dx, dy);
+    if (dist > pi.maxDist) pi.maxDist = dist;
+    if (pi.dragging) { ev.preventDefault(); placeGhost(t); updateDragOver(t); return; }
+    // slop de 16px: treme-dedo de tela capacitiva NAO vira drag nem cancela tooltip
+    if (dist <= TOUCH_SLOP) return;
+    pi.moved = true;
+    if (pi.timer) { clearTimeout(pi.timer); pi.timer = null; } // ainda nao mostrou: abafa o tooltip
+    if (editMode && pi.s) {
+      ev.preventDefault();
+      if (pi.tooltipShown) hideTooltip(); // tooltip aberto + dedo andou em editMode: passa a ser drag
+      beginDrag(t);
+      return;
     }
-    if (pi.holdArmed) ev.preventDefault(); // tooltip ja mostrado: segura o gesto, sem scroll
+    if (pi.tooltipShown) ev.preventDefault(); // tooltip fica aberto; gesto é nosso
+    // sem editMode/slot vazio: nada (a aba não rola)
   }
   function touchById(list, id) {
     for (let i = 0; i < list.length; i++) if (list[i].identifier === id) return list[i];
@@ -307,10 +316,18 @@
   function onTouchEnd(ev) {
     if (!pi || !pi.touch) return;
     const p = pi;
-    if (p.dragging) { doDrop(); cleanupPress(); return; }
+    if (p.dragging) {
+      // rede de seguranca: "drag" que quase nao andou foi um tap com jitter
+      if (p.maxDist < TOUCH_SLOP * 2 && Date.now() - p.t0 < 450) {
+        cleanupPress();
+        tapSlot(p.s, p.idx, p.el);
+        return;
+      }
+      doDrop(); cleanupPress(); return;
+    }
     if (Date.now() < ttSuppressUntil) { cleanupPress(); return; }
     if (p.tooltipShown) { ttSuppressUntil = Date.now() + 600; cleanupPress(); return; } // tooltip fica aberta; toque nao age
-    if (p.moved) { cleanupPress(); return; } // era scroll / gesto descartado
+    if (p.moved) { cleanupPress(); return; } // dedo andou sem drag: gesto descartado
     clearTimeout(p.timer); p.timer = null;
     tapSlot(p.s, p.idx, p.el);
     cleanupPress();
