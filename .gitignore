@@ -1,0 +1,29 @@
+# Build artifacts
+dist/
+.apkbuild/
+*.apk
+*.apk.idsig
+*.zip
+
+# Keys / secrets
+debug.keystore
+*.keystore
+*.jks
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Node
+node_modules/
+
+# Gradle/Android
+.gradle/
+build/
+local.properties
+
+# .NET
+bin/
+obj/

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <rect width="192" height="192" rx="32" fill="#0a0e14"/>
+  <circle cx="96" cy="88" r="56" fill="none" stroke="#cfb061" stroke-width="6"/>
+  <path d="M96 46 l7 15 16 2 -12 12 3 16 -14 -8 -14 8 3 -16 -12 -12 16 -2 z" fill="#cfb061"/>
+  <rect x="40" y="152" width="112" height="10" rx="5" fill="#223044"/>
+  <text x="96" y="135" font-family="sans-serif" font-size="20" fill="#7d8ea8" text-anchor="middle">THOR · XIV</text>
+</svg>

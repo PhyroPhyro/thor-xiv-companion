@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a0e14">
+<title>Thor XIV Companion</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icons/app.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<header id="topbar">
+  <span id="conn-dot" class="dot off" title="conexão"></span>
+  <span id="zone-name">desconectado</span>
+  <span id="map-name" class="dim"></span>
+  <span class="spacer"></span>
+  <span id="et-clock" class="dim"></span>
+</header>
+
+<!-- faixa persistente (sempre visível em todas as abas) -->
+<div id="status-bar">
+  <div id="self" class="panel strip">
+    <div class="self-head">
+      <span id="self-job" class="jobchip">?</span>
+      <span id="self-name">—</span>
+      <span id="self-level" class="dim"></span>
+    </div>
+    <div class="bar hp"><i id="self-hp-fill"></i><b id="self-hp-txt"></b></div>
+    <div class="bar mp"><i id="self-mp-fill"></i><b id="self-mp-txt"></b></div>
+  </div>
+  <div id="target" class="panel strip hidden">
+    <div class="self-head">
+      <span id="target-job" class="jobchip">T</span>
+      <span id="target-name"></span>
+    </div>
+    <div class="bar tg"><i id="target-hp-fill"></i><b id="target-hp-txt"></b></div>
+  </div>
+</div>
+
+<main id="layout">
+  <div id="panels">
+    <div id="tab-hotbar" class="tab active"><div id="hotbar-wrap"></div></div>
+    <div id="tab-mapa" class="tab">
+      <canvas id="minimap" width="700" height="700"></canvas>
+      <div id="coords" class="dim">--.--, --.--</div>
+    </div>
+    <div id="tab-party" class="tab"><ul id="party-list"></ul></div>
+    <div id="tab-chat" class="tab"><div id="chat-log"></div></div>
+    <div id="tab-settings" class="tab"><div id="settings-content"></div></div>
+  </div>
+  <nav id="tabs">
+    <button data-tab="hotbar" class="active">Hotbar</button>
+    <button data-tab="mapa">Mapa</button>
+    <button data-tab="party">Party</button>
+    <button data-tab="chat">Chat</button>
+    <button data-tab="settings">Settings</button>
+  </nav>
+</main>
+
+<script src="/js/channels.js"></script>
+<script src="/js/demo.js"></script>
+<script src="/js/hotbar.js"></script>
+<script src="/js/map.js"></script>
+<script src="/js/ui.js"></script>
+<script src="/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../dalamud-plugin/ThorXivBridge/BridgeServer.cs" />
+    <Compile Include="../../dalamud-plugin/ThorXivBridge/WsClient.cs" />
+    <Compile Include="../../dalamud-plugin/ThorXivBridge/CommandsApi.cs" />
+    <Compile Include="../../dalamud-plugin/ThorXivBridge/Config.cs" />
+    <Compile Include="../../dalamud-plugin/ThorXivBridge/Assets.cs" />
+  </ItemGroup>
+</Project>

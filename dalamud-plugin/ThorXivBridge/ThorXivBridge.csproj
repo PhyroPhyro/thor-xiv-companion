@@ -1,0 +1,28 @@
+<Project Sdk="Dalamud.NET.Sdk/15.0.0">
+  <PropertyGroup>
+    <Version>0.5.1</Version>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Use_Dalamud_FFXIVClientStructs>true</Use_Dalamud_FFXIVClientStructs>
+    <Author>phyro</Author>
+    <Name>Thor XIV Companion Bridge</Name>
+    <Punchline>Exibe o estado do FFXIV via WebSocket para o companion de segunda tela no AYN Thor.</Punchline>
+    <Description>Serve um snapshot JSON do estado do jogo (party, HP/MP, coordenadas de mapa, zona, chat) por WebSocket e HTTP na LAN, para o Thor XIV Companion rodar na tela inferior do AYN Thor. Endpoint configurável em thorxiv.json ao lado do DLL.</Description>
+    <RepoUrl>https://github.com/phyro/thor-xiv-companion</RepoUrl>
+    <Tags>companion;second-screen;ayn-thor;websocket</Tags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\companion\**\*">
+      <Link>companion\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Visible>false</Visible>
+    </Content>
+    <EmbeddedResource Include="..\..\companion\**\*" LogicalName="companion/%(RecursiveDir)%(Filename)%(Extension)">
+      <Visible>false</Visible>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Makaretu.Dns.Multicast" Version="0.27.0" />
+  </ItemGroup>
+</Project>

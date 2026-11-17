@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ThorXIV — conectar</title>
+<style>
+  :root { color-scheme: dark; }
+  body { background:#0a0e14; color:#d8e3f3; font:16px system-ui,sans-serif; margin:0; padding:24px 18px; }
+  h1 { font-size:22px; color:#cfb061; margin:0 0 4px; }
+  .sub { color:#7d8ea8; font-size:13px; margin-bottom:18px; }
+  #status { font-size:14px; color:#7d8ea8; min-height:20px; margin-bottom:14px; }
+  button.host { display:block; width:100%; text-align:left; margin:8px 0; padding:14px;
+    background:#131a24; border:1px solid #223044; border-radius:10px; color:#d8e3f3; font-size:16px; }
+  button.host.live { border-color:#53d769; }
+  button.host .u { color:#cfb061; }
+  .row { display:flex; gap:10px; margin-top:16px; }
+  .row button { flex:1; padding:12px; border-radius:10px; border:1px solid #cfb061;
+    background:transparent; color:#cfb061; font-size:15px; }
+  input { width:100%; padding:12px; border-radius:10px; border:1px solid #223044;
+    background:#0d1420; color:#d8e3f3; font-size:15px; margin-top:6px; }
+</style>
+</head>
+<body>
+<h1>ThorXIV Companion</h1>
+<div class="sub">Procurando o ThorXivBridge na rede (mDNS + varredura /24)...</div>
+<div id="status"></div>
+<div id="hosts"></div>
+<div class="row"><button onclick="ThorNative.scan()">Reescanear</button>
+<button onclick="openManual()">Conectar manual</button></div>
+<input id="manual" type="text" placeholder="IP do PC (ex.: 192.168.15.131)" style="display:none">
+<div class="row"><button onclick="ThorNative.openDemo()">Modo demo (sem PC)</button></div>
+
+<script>
+function render(st) {
+  var s = JSON.parse(st);
+  document.getElementById('status').textContent = s.scanning
+    ? 'varrendo a rede...' : (s.hosts.length ? s.hosts.length + ' dispositivo(s) na porta ' + s.port : 'nada encontrado na porta ' + s.port);
+  var box = document.getElementById('hosts');
+  box.innerHTML = '';
+  s.hosts.forEach(function (h) {
+    var b = document.createElement('button');
+    b.className = 'host' + (h.alive ? ' live' : '');
+    b.innerHTML = '<span class="u">' + h.url + '</span>' + (h.name ? ' &middot; ' + h.name : '');
+    b.onclick = function () { ThorNative.open(h.url + '/'); };
+    box.appendChild(b);
+  });
+}
+function openManual() {
+  var el = document.getElementById('manual');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+  if (el.style.display === 'block') el.focus();
+}
+document.getElementById('manual').addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') {
+    var ip = e.target.value.trim();
+    if (ip) ThorNative.open('http://' + ip + ':11436/');
+  }
+});
+setInterval(function () { render(ThorNative.getState()); }, 600);
+render(ThorNative.getState());
+</script>
+</body>
+</html>
