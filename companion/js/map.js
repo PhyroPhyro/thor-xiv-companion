@@ -278,7 +278,7 @@
     yImg(y) { return Y_FLIP ? (y - 1) * (this.SF.y / 2) * (this.imgH / 2048)
                             : this.imgH - (y - 1) * (this.SF.y / 2) * (this.imgH / 2048); }
     imgXToCoord(px) { return px * 2 / this.SF.x * (2048 / this.imgW) + 1; }
-    imgYToCoord(py) { return (this.imgH - py) * 2 / this.SF.y * (2048 / this.imgH) + 1; }
+    imgYToCoord(py) { return (Y_FLIP ? py : this.imgH - py) * 2 / this.SF.y * (2048 / this.imgH) + 1; }
 
     clamp() {
       const c = this.canvas;
@@ -294,8 +294,9 @@
       const cy_img = Math.min(Math.max(this.yImg(this.cy), minY), maxY);
       this.cx = this.imgXToCoord(cx_img);
       this.cy = this.imgYToCoord(cy_img);
+      // bordas do span de coords (independentes de Y_FLIP): pega o MAIOR entre as duas origens
       this.cx = Math.min(Math.max(this.cx, 1), this.imgXToCoord(this.imgW));
-      this.cy = Math.min(Math.max(this.cy, 1), this.imgYToCoord(0));
+      this.cy = Math.min(Math.max(this.cy, 1), Math.max(this.imgYToCoord(0), this.imgYToCoord(this.imgH)));
     }
 
     // Muda o zoom, opcionalmente fixando o ponto da tela (aboutX, aboutY) sobre o
@@ -474,7 +475,7 @@
           if (sx < -24 || sx > W + 24 || sy < -24 || sy > H + 24) continue;
           const kind = POI_AETHERYTE_ICONS.has(p.icon) ? "aetheryte"
             : (POI_COMMERCE_ICONS.has(p.icon) ? "commerce" : "default");
-          const r = kind === "commerce" ? 4 : (kind === "aetheryte" ? 7 : 3);
+          const r = kind === "aetheryte" ? 8 : (kind === "commerce" ? 7 : 6);
           ctx.beginPath();
           if (kind === "aetheryte") {
             // losango
@@ -486,8 +487,8 @@
           ctx.fillStyle = kind === "aetheryte" ? POI_AETHERYTE
             : (kind === "commerce" ? POI_COMMERCE : POI_DEFAULT);
           ctx.fill();
-          if (kind === "aetheryte") {
-            ctx.lineWidth = 1; ctx.strokeStyle = MAP_PIN_STROKE; ctx.stroke();
+          if (kind !== "default") {
+            ctx.lineWidth = 1.5; ctx.strokeStyle = MAP_PIN_STROKE; ctx.stroke();
           }
           // rótulo curto apenas com zoom razoável
           if (kind === "aetheryte" && this.scale >= 2 && p.name) {
