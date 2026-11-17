@@ -73,9 +73,9 @@ public class MainActivity extends Activity {
 
             @Override
             public void onPageFinished(WebView v, String url) {
-                // picker precisa de foco de teclado (digita IP); páginas do companheiro não.
-                if (PICKER.equals(url)) setInputFocusable(true);
-                else setInputFocusable(false);
+                // Janela nasce SEM foco (picker também): foco só via requestTextFocus ao tocar campo.
+                // Window focusable no launch rouba o foreground do jogo no Cocoon (empurra p/ background).
+                setInputFocusable(false);
             }
         });
         web.addJavascriptInterface(new NativeApi(), "ThorNative");
@@ -96,7 +96,6 @@ public class MainActivity extends Activity {
 
     private void loadInitialPicker() {
         web.loadUrl(PICKER);
-        setInputFocusable(true); // picker precisa digitar endereço
         main.postDelayed(() -> {
             if (activeUrl == null) discovery.scan(0);
         }, 300);
@@ -135,7 +134,6 @@ public class MainActivity extends Activity {
     private void showPicker() {
         activeUrl = null;
         web.loadUrl(PICKER);
-        setInputFocusable(true);
     }
 
     private void openEndpoint(String url) {
@@ -244,7 +242,11 @@ public class MainActivity extends Activity {
 
         @android.webkit.JavascriptInterface
         public void requestTextFocus() {
-            runOnUiThread(() -> setInputFocusable(true));
+            runOnUiThread(() -> {
+                setInputFocusable(true);
+                InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                imm.showSoftInput(web, InputMethodManager.SHOW_IMPLICIT);
+            });
         }
 
         @android.webkit.JavascriptInterface

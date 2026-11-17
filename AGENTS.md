@@ -67,6 +67,15 @@ README.md e no vault (`4. Projetos/Thor XIV Companion`).
   probe com executor encerrado). `startActivity(launchDisplayId)` pelo app é negado silenciosamente.
   Caminho único confiável para abrir na tela de baixo: `adb shell am start --display <id>` (shell tem
   a permissão; o app, não).
+- **PowerShell: `Write-Output` dentro de function vira o RETORNO dela** (deploy-thor.sh): os logs do Probe
+  eram capturados em `$ok` (array) e as asserções viravam truthy silencioso — falso verde. Regra: functions
+  de teste acumulam logs em `$global:LOG` e retornam BOOL puro; imprime-se o log depois da chamada.
+- **Cocoon com sessão de jogo ativa retém `topResumedActivity` das displays**: o companion fica PAUSED por
+  lifecycle (visível e interativo) e isso é NORMAL — assert de sucesso = `Displayed` + jogo seguiu resumed
+  (comparar lista de activities resumed antes/depois do launch) + crash limpo; `topResumed=thorxiv` é só WARN.
+- **Janela do app no Thor nunca nasce focável** (0.4.20): launcher de app no Android dá window focus ao
+  activity; com jogo streaming, isso empurrava o jogo p/ background. Picker também usa handshake ThorNative
+  (focusin/focusout) para IME sob demanda.
 - **Verificação de app no Thor não pode ser `pidof`** (falso positivo clássico): o deploy-thor.sh exige
   `Displayed com.phyro.thorxiv` no ActivityTaskManager + `topResumedActivity=.*thorxiv` + crash buffer
   limpo; mudança de comportamento do app = reexecutar `bash scripts/deploy-thor.sh <apk>` e ler os PROBEs.

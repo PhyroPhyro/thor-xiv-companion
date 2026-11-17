@@ -59,6 +59,17 @@ document.getElementById('manual').addEventListener('keydown', function (e) {
 });
 setInterval(function () { render(ThorNative.getState()); }, 600);
 render(ThorNative.getState());
+
+// foco de janela sob demanda: só enquanto um campo de texto estiver ativo (senão rouba o jogo no Cocoon)
+(function () {
+  if (!window.ThorNative) return;
+  function isText(t) { return t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA"); }
+  document.addEventListener("focusin", function (e) { if (isText(e.target)) ThorNative.requestTextFocus(); });
+  document.addEventListener("focusout", function (e) {
+    if (!isText(e.target)) return;
+    setTimeout(function () { if (!isText(document.activeElement)) ThorNative.releaseTextFocus(); }, 60);
+  });
+})();
 </script>
 </body>
 </html>
