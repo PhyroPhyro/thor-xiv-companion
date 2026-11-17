@@ -61,9 +61,28 @@ body {
 #tab-hotbar { overflow: hidden; } /* aba da hotbar nunca rola: gesto de drag tem prioridade total */
 
 /* mapa como conteúdo da aba "Mapa" */
-#tab-mapa { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px; }
-#minimap { width: min(92vw, 70vh, 560px); height: auto; aspect-ratio: 1; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); }
+#tab-mapa { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px; position: relative; }
+#minimap { width: min(92vw, 70vh, 560px); height: auto; aspect-ratio: 1; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); display: block; touch-action: none; }
 #coords { font-size: 20px; font-variant-numeric: tabular-nums; color: var(--text-muted); }
+
+/* HUD de zoom/seguir da aba mapa: só visível com a aba ativa (CSS) */
+.map-hud {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  display: flex;
+  gap: 6px;
+  z-index: 12;
+}
+#tab-mapa:not(.active) .map-hud { display: none !important; }
+#map-hud .btn {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  font-size: 20px;
+}
 
 /* ---- barra de abas fixa embaixo: 5 botoes, larguras iguais, toda a tela ---- */
 #tabs {
