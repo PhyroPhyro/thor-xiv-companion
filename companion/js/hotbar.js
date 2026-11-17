@@ -142,6 +142,7 @@
     idEl.textContent = idLine || "";
     if (tt) tt.classList.remove("hidden");
     ttOpen = true;
+    window.haptic?.(15); // longa: abertura de tooltip por long-press
     clearTimeout(ttTimer); ttTimer = null; // sem auto-fechamento
   }
   function hideTooltip() { clearTimeout(ttTimer); ttTimer = null; const tt = $("hb-tooltip"); if (tt) tt.classList.add("hidden"); ttOpen = false; }

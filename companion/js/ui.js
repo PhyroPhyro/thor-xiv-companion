@@ -82,6 +82,57 @@
     return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   }
 
+  // ---- envio de chat (T6) ----
+  const CHAT_MAX = 500;
+  // prefixo do comando -> XivChatType do eco local (Say=10, Party=14, LS1=16)
+  const CHAT_CHANNELS = { "/say ": 10, "/p ": 14, "/ls1 ": 16 };
+  let chatPrefix = "/say ";
+
+  // unico helper de vibracao do app. Sem navegador/sem motor -> no-op silencioso.
+  function haptic(ms) { if (navigator.vibrate) navigator.vibrate(ms); }
+  window.haptic = haptic; // usado tambem por hotbar.js (tooltips de long-press)
+
+  function chatEcho(channelId, text) {
+    const box = $("chat-log");
+    const ch = window.channelInfo(channelId);
+    const cls = ch.cls || "";
+    const div = document.createElement("div");
+    div.className = "line " + cls;
+    div.innerHTML = "<span class=\"" + cls + "\"><span class=\"ch-tag\">[" + ch.name + "]</span> </span>" +
+      '<span class="dim">(você)</span> ' + escapeHtml(text);
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  let chatStatusTimer = null;
+  function chatStatus(msg) {
+    const el = $("chat-status");
+    if (!el) return;
+    if (!msg) { el.textContent = ""; clearTimeout(chatStatusTimer); chatStatusTimer = null; return; }
+    el.textContent = msg;
+    clearTimeout(chatStatusTimer);
+    chatStatusTimer = setTimeout(() => { el.textContent = ""; }, 2500);
+  }
+
+  function chatChannelId() { return CHAT_CHANNELS[chatPrefix] || 10; }
+
+  function chatSend() {
+    const input = $("chat-input");
+    let text = String(input.value || "").replace(/\r\n|\r|\n/g, " ").trim();
+    if (!text) { chatStatus("digite uma mensagem"); return; }
+    if (text.length > CHAT_MAX) text = text.slice(0, CHAT_MAX);
+    if (!(window.__txState && window.__txState.loggedIn)) { chatStatus("entre no jogo primeiro"); haptic(60); return; }
+    if (window.__txDemo) { haptic(10); chatEcho(chatChannelId(), text); input.value = ""; chatStatus("enviado (demo)"); return; }
+    const cmd = chatPrefix + text;
+    fetch("/api/command", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "command", cmd: cmd }) })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.ok) { haptic(10); chatEcho(chatChannelId(), text); input.value = ""; chatStatus("enviado"); }
+        else { haptic(60); chatStatus("erro: " + (d.error || "?")); }
+      })
+      .catch(() => { haptic(60); chatStatus("sem conexão com o bridge"); });
+  }
+
   let state = null;
 
   window.UI = {
@@ -109,4 +160,18 @@
     const m = Math.floor((etSec % 3600) / 60);
     $("et-clock").textContent = "ET " + String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
   }, 1000);
+
+  // wiring da barra de envio de chat (ids estaticos em index.html, seguros capturar aqui)
+  (function () {
+    const seg = $("chat-seg");
+    seg.querySelectorAll(".hb-seg-btn").forEach((bt) => {
+      bt.onclick = function () {
+        seg.querySelectorAll(".hb-seg-btn").forEach((b) => b.classList.remove("active"));
+        this.classList.add("active");
+        chatPrefix = this.dataset.prefix;
+      };
+    });
+    $("chat-input").addEventListener("keydown", function (e) { if (e.key === "Enter") chatSend(); });
+    $("chat-send").onclick = chatSend;
+  })();
 })();

@@ -97,7 +97,16 @@ body {
 #party-list .bar { width: 45%; }
 #party-list li.offline { opacity: .4; }
 
-#chat-log { padding: 10px 12px; font-size: 14px; }
+/* aba Chat: log rolável + barra de envio fixa fora da área de scroll */
+#tab-chat { display: flex; flex-direction: column; height: 100%; }
+#chat-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#chat-log { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 12px; font-size: 14px; }
+#chat-send-bar { border-top: 1px solid var(--border-inner); background: var(--panel); padding: 8px 12px; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
+#chat-seg { max-width: 260px; flex-shrink: 0; }
+#chat-input-wrap { display: flex; gap: 8px; }
+#chat-input { flex: 1; min-width: 0; }
+#chat-status { min-height: 16px; }
+
 #chat-log .line { padding: 2px 0; word-wrap: break-word; }
 #chat-log .ch-sender { color: var(--text); font-weight: 600; }
 #chat-log .ch-tag { color: var(--text-muted); font-size: 12px; }
