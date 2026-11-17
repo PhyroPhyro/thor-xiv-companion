@@ -256,8 +256,9 @@
           if (!f.Icon || !f.Icon.id) continue; // sem ícone: não desenha nada
           const x = Number(f.X), y = Number(f.Y);
           if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+          // xivapi raw px2048 -> game coords at ingestion (docs formula; renderer consumes coords)
           pois.push({
-            x: x, y: y,
+            x: x * 2 / this.SF.x + 1, y: y * 2 / this.SF.y + 1,
             icon: Number(f.Icon.id),
             name: (f.PlaceNameSubtext && f.PlaceNameSubtext.fields && f.PlaceNameSubtext.fields.Name) || ""
           });
@@ -500,8 +501,9 @@
           // Docs XIVAPI: px do doc = topo-esquerda igual ao nosso (eixo Y medido: marcador X=804 a ~8px do
           // player em modo direto). Y do doc (FishingSpot-style) é origem INFERIOR -> yImg trata o norte;
           // mantemos cy direto como no X e o Y_FLIP do pipeline cuida da tela.
-          const cx = p.x * 2 / this.SF.x + 1;
-          const cy = p.y * 2 / this.SF.y + 1;
+          // p.x/p.y are GAME COORDINATES in every source now (plugin converts with SizeFactor +
+          // AgentMap offsets; the xivapi fallback is converted at load time with the row's offset).
+          const cx = p.x, cy = p.y;
           const px = this.xImg(cx);
           const py = this.yImg(cy);
           const sx = W / 2 + (px - cx_img) * s_eff;

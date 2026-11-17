@@ -346,8 +346,9 @@ public sealed class StateCollector
         var markers = agent.MapMarkers;
         // MapMarkerCount can lag until the map UI initializes once per zone; scan the
         // bounded array and rely on IconId==0 to skip empty slots.
+        // Always scan the full bounded array: MapMarkerCount lags/underreports until the map
+        // UI initializes once per zone; IconId==0 filters empty slots reliably.
         int count = markers.Length;
-        if (agent.MapMarkerCount > 0 && agent.MapMarkerCount < count) count = agent.MapMarkerCount;
         int n = 0;
         for (int i = 0; i < count && n < 600; i++)
         {
@@ -358,10 +359,19 @@ public sealed class StateCollector
             // the PWA converts px->coord with the same scale (xImg/yImg), without re-applying the offset.
             if (m.X < 0 || m.X > 2048 || m.Y < 0 || m.Y > 2048) continue; // off the texture
             var name = m.Subtext.HasValue ? m.Subtext.ToString() : "";
+            // Convert to GAME coordinates here, where SizeFactor AND the AgentMap offsets are
+            // at hand (MapUtil semantics: Excel offset == -CurrentOffset*): coord = px*2/SF + 1 - 0.02*off.
+            float sfX = agent.CurrentMapSizeFactor == 0 ? 100f : agent.CurrentMapSizeFactor;
+            float sfY = sfX;
+            float cx = m.X * 2f / sfX + 1f - 0.02f * agent.CurrentOffsetX;
+            float cy = m.Y * 2f / sfY + 1f - 0.02f * agent.CurrentOffsetY;
+            if (cx < 0f || cx > 200f || cy < 0f || cy > 200f) continue;
             if (n++ > 0) sb.Append(',');
-            sb.Append("\"x\":").Append(Fmt(m.X)).Append(",\"y\":").Append(Fmt(m.Y))
+            sb.Append('{')
+              .Append("\"x\":").Append(Fmt(cx)).Append(",\"y\":").Append(Fmt(cy))
               .Append(",\"icon\":").Append(m.IconId)
-              .Append(",\"name\":").Append(System.Text.Json.JsonSerializer.Serialize(name));
+              .Append(",\"name\":").Append(System.Text.Json.JsonSerializer.Serialize(name))
+              .Append('}');
         }
         sb.Append(']');
         return sb.ToString();
