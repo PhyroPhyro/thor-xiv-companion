@@ -1,0 +1,64 @@
+/* @components/Panel — reaproveitar em todas as telas */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: inset 0 0 0 1px var(--border-inner);
+}
+
+/* faixa interna da barra de status (sem borda/raio próprios) */
+.panel.strip {
+  background: var(--clear);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+}
+
+/* título de janela: fonte de título, caixa alta pequena, dourado,
+   divisor fino dourado embaixo que esmaece nas pontas */
+.panel-title {
+  font-family: var(--font-title);
+  text-transform: uppercase;
+  font-size: 13px;
+  letter-spacing: 0.16em;
+  color: var(--gold);
+  margin: 0 0 10px;
+  padding-bottom: 7px;
+  position: relative;
+  display: block;
+}
+.panel-title::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  height: 1px;
+  background: linear-gradient(to right, var(--clear), var(--gold), var(--clear));
+}
+
+/* item de lista genérico (party, skills, presets etc.) */
+.list-item {
+  background: var(--clear);
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.list-item.selected {
+  background: var(--select-gradient);
+  color: var(--gold-bright);
+}
+.list-item:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: -2px;
+}
+
+/* divisor: 1px, gradiente que esmaece nas duas pontas */
+.divider {
+  border: none;
+  height: 1px;
+  margin: 12px 0;
+  background: linear-gradient(to right, var(--clear), var(--border), var(--clear));
+}

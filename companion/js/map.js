@@ -2,6 +2,16 @@
 (function () {
   "use strict";
 
+  const ROOT = getComputedStyle(document.documentElement);
+  const gv = (name) => ROOT.getPropertyValue(name).trim();
+  const MAP_BG = gv("--map-bg");
+  const MAP_GRID = gv("--map-grid");
+  const MAP_GRID_SUB = gv("--map-grid-sub");
+  const MAP_LABEL = gv("--map-label");
+  const MAP_PIN = gv("--map-pin");
+  const MAP_PIN_STROKE = gv("--map-pin-stroke");
+  const MAP_EMPTY = gv("--map-empty");
+
   const INVERT_Y = true; // y de mapa aumenta para o norte (topo) — inverta se o pino ficar espelhado
 
   class Minimap {
@@ -40,12 +50,12 @@
         ctx.drawImage(this.img, 0, 0, W, H);
         ctx.globalAlpha = 1;
       } else {
-        ctx.fillStyle = "#0d1420";
+        ctx.fillStyle = MAP_BG;
         ctx.fillRect(0, 0, W, H);
       }
 
       // grid 4x4 (setores) + subdivisões de 10%
-      ctx.strokeStyle = "rgba(207,176,97,0.35)";
+      ctx.strokeStyle = MAP_GRID;
       ctx.lineWidth = 1;
       for (let i = 1; i < 4; i++) {
         const p = (W * i) / 4;
@@ -53,7 +63,7 @@
         const q = (H * i) / 4;
         ctx.beginPath(); ctx.moveTo(0, q); ctx.lineTo(W, q); ctx.stroke();
       }
-      ctx.strokeStyle = "rgba(255,255,255,0.08)";
+      ctx.strokeStyle = MAP_GRID_SUB;
       for (let i = 1; i < 41; i++) {
         if (i % 10 === 0) continue;
         const p = (W * (i - 1)) / 40;
@@ -63,7 +73,7 @@
       }
 
       // labels de setor (1-4 colunas, A-D linhas) estilo FFXIV
-      ctx.fillStyle = "rgba(216,227,243,0.5)";
+      ctx.fillStyle = MAP_LABEL;
       ctx.font = "22px sans-serif";
       const letters = INVERT_Y ? ["A", "B", "C", "D"] : ["D", "C", "B", "A"];
       for (let i = 0; i < 4; i++) {
@@ -80,15 +90,15 @@
         // pino do player
         ctx.beginPath();
         ctx.arc(px, y, 12, 0, Math.PI * 2);
-        ctx.fillStyle = "#ffcc44";
+        ctx.fillStyle = MAP_PIN;
         ctx.fill();
         ctx.lineWidth = 3;
-        ctx.strokeStyle = "#1c1c1c";
+        ctx.strokeStyle = MAP_PIN_STROKE;
         ctx.stroke();
       }
 
       if (!this.img && !this.imgTried) {
-        ctx.fillStyle = "rgba(216,227,243,0.35)";
+        ctx.fillStyle = MAP_EMPTY;
         ctx.font = "20px sans-serif";
         ctx.textAlign = "center";
         ctx.fillText("carregando mapa…", W / 2, H / 2);
