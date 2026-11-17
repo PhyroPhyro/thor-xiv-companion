@@ -15,10 +15,10 @@
   const MAP_EMPTY = gv("--map-empty");
   const MAP_OFFLINE = gv("--map-offline");
 
-  const INVERT_Y = true; // y de mapa aumenta para o norte (topo) — inverte na textura
   const MAP_CACHE_KEY = "txmap.v1";
   const RESOLVE_TIMEOUT_MS = 6000;
   const XIVAPI_BASE = "https://v2.xivapi.com";
+  const Y_FLIP = false; // v. teste de marco: true se norte-sul espelhado na imagem do xivapi
 
   const ZOOM_STEP = 1.6;
   const ZOOM_MIN = 1;
@@ -47,6 +47,7 @@
       this.follow = true;      // recentra no player a cada coords novo (desligado pelo ◎ ou arraste/zoom manual)
       this.SF = { x: 100, y: 100 }; // SizeFactor da linha Map: px de textura por unidade de coord via (imgW/2.54)/SF
       this.lastCoords = null;  // últimas coords vistas (projeção do pino mesmo em modo manual parado)
+      this.mode = "auto";      // "auto" | "follow" | "explore" (◎ cicla; pan/± → explore)
       this.autoFrame = true;   // enquadra a área onde o player anda (média + spread do buffer); off em pan/zoom manual
       this.buf = [];           // últimas coords da zona
       this.lastPos = null;
@@ -84,6 +85,7 @@
       this.scale = ZOOM_MIN;
       this.follow = true;
       this.autoFrame = true;
+      this.mode = "auto";
       this.buf = [];
       this.manualAnchor = null;
       this.lastPos = null;
@@ -189,8 +191,11 @@
     // quando a imagem já cabe inteira (scale 1), o centro fica travado ao meio.
     // CANÔNICO (xivapi/ffxiv-datamining MapCoordinates.md): coord = px/SF*2 + 1 na textura 2048.
     // px = (coord-1)*SF/2 ; pino y-invertido (norte topo). Escala por imgW/2048 p/ variações de asset.
+    // Y_FLIP: se um teste em marco conhecido mostrar o pino espelhado verticalmente
+    // (ex.: virar ao norte e o pino descer), trocar para true — único ponto da inversão.
     xImg(x) { return (x - 1) * (this.SF.x / 2) * (this.imgW / 2048); }
-    yImg(y) { return this.imgH - (y - 1) * (this.SF.y / 2) * (this.imgH / 2048); }
+    yImg(y) { return Y_FLIP ? (y - 1) * (this.SF.y / 2) * (this.imgH / 2048)
+                            : this.imgH - (y - 1) * (this.SF.y / 2) * (this.imgH / 2048); }
     imgXToCoord(px) { return px * 2 / this.SF.x * (2048 / this.imgW) + 1; }
     imgYToCoord(py) { return (this.imgH - py) * 2 / this.SF.y * (2048 / this.imgH) + 1; }
 
@@ -242,31 +247,41 @@
     // +/− só mudam o fator de zoom; o enquadramento continua acompanhando o player
     // (autoFrame ligado; se desligado antes, mantém-se a ancora manual que anda com o player)
     zoomIn() {
+      if (!this.autoFrame && !this.follow) this.mode = "explore";
       this.setScale(this.scale * ZOOM_STEP, this.canvas.width / 2, this.canvas.height / 2);
     }
 
     zoomOut() {
+      if (!this.autoFrame && !this.follow) this.mode = "explore";
       this.setScale(this.scale / ZOOM_STEP, this.canvas.width / 2, this.canvas.height / 2);
     }
 
+    // ◎ ciclo de modos: AUTO (enquadra onde você anda) -> SEGUIR (jogador centrado) -> EXPLORAR.
+    // pan/zoom ± também caem em EXPLORAR.
     toggleFollow() {
-      this.follow = true;
-      this.autoFrame = true;
-      this.buf = [];
-      this.manualAnchor = null;
+      if (this.autoFrame) {
+        this.autoFrame = false; this.follow = true; this.mode = "follow";
+      } else if (this.follow) {
+        this.follow = false; this.mode = "explore";
+      } else {
+        this.autoFrame = true; this.follow = false; this.buf = []; this.manualAnchor = null; this.mode = "auto";
+      }
       this.syncFollowBtn();
     }
+
+    modeLabel() { return this.autoFrame ? "auto" : (this.follow ? "follow" : "explore"); }
 
     syncFollowBtn() {
       const b = $("map-follow");
       if (!b) return;
-      b.textContent = "◎";
-      b.title = "Re-enquadrar área de movimento (auto)";
+      const label = this.modeLabel();
+      b.textContent = label === "auto" ? "◎" : (label === "follow" ? "◉" : "◇");
+      b.title = "Modo " + label + " — toque: auto → seguir → explorar";
     }
 
     // Arrasta o viewport (dx,dy em px de tela). Desliga o follow: o usuário assumiu o centro.
     pan(dx, dy) {
-      this.follow = false; this.autoFrame = false;
+      this.follow = false; this.autoFrame = false; this.mode = "explore";
       const c = this.canvas;
       const iw = this.imgW, ih = this.imgH;
       const fit = this.img ? Math.min(c.width / iw, c.height / ih) : Math.min(c.width / iw, c.height / ih);
@@ -430,7 +445,7 @@
           panX = e.touches[0].clientX;
           panY = e.touches[0].clientY;
         }
-        this.follow = false; this.manualAnchor = this.lastCoords ? { x: this.lastCoords.x, y: this.lastCoords.y } : null; this.autoFrame = false;
+        this.follow = false; this.autoFrame = false; this.mode = "explore"; this.manualAnchor = this.lastCoords ? { x: this.lastCoords.x, y: this.lastCoords.y } : null; this.autoFrame = false;
         e.preventDefault();
       }, { passive: false });
 
@@ -455,7 +470,7 @@
         if (e.button !== 0) return;
         panX = e.clientX;
         panY = e.clientY;
-        this.follow = false; this.manualAnchor = this.lastCoords ? { x: this.lastCoords.x, y: this.lastCoords.y } : null; this.autoFrame = false;
+        this.follow = false; this.autoFrame = false; this.mode = "explore"; this.manualAnchor = this.lastCoords ? { x: this.lastCoords.x, y: this.lastCoords.y } : null; this.autoFrame = false;
       });
       c.addEventListener("mousemove", (e) => {
         if (panX == null) return;
