@@ -35,11 +35,13 @@ public class MainActivity extends Activity {
     private android.content.SharedPreferences prefs;
     private volatile String activeUrl = null;
     private boolean probing = false;
+    private static volatile boolean sSecondaryResumed = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        if (getIntent().hasExtra("on-secondary")) sSecondaryResumed = true;
         if (!relocateToSecondScreen()) return; // atividade reiniciada na tela de baixo
 
         prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE);
@@ -100,20 +102,34 @@ public class MainActivity extends Activity {
         }, 300);
     }
 
-    /** Retorna false quando a atividade vai se reiniciar na segunda tela (finish já chamado). */
+    /**
+     * Tenta mover para a segunda tela SEM se matar antes: só finish() quando a nova instância
+     * confirmou resume (handshake estático). startActivity com launchDisplayId pode ser negado
+     * silenciosamente pelo vendor (0.4.16/17 "pisca"): nesse caso seguimos rodando aqui.
+     * Retorna false apenas quando há certeza de que outra instância assumiu (finish agendado).
+     */
     private boolean relocateToSecondScreen() {
-        boolean asked = getIntent().hasExtra("on-secondary");
         Display[] pres = ((DisplayManager) getSystemService(Context.DISPLAY_SERVICE))
                 .getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION);
         if (pres == null || pres.length == 0) return true; // sem segunda tela: roda normal
-        long id = pres[0].getDisplayId();
-        if (getDisplay().getDisplayId() == id) return true;
-        if (asked) return true; // já tentou, não entra em loop
-        android.app.ActivityOptions opts = android.app.ActivityOptions.makeBasic();
-        opts.setLaunchDisplayId((int) id);
-        startActivity(getIntent().putExtra("on-secondary", true), opts.toBundle());
-        finish();
-        return false;
+        final long id = pres[0].getDisplayId();
+        if (getDisplay().getDisplayId() == id) return true; // já estamos na tela de baixo
+        if (getIntent().hasExtra("on-secondary")) return true; // extra não respeitado: roda onde está
+        sSecondaryResumed = false;
+        try {
+            android.app.ActivityOptions opts = android.app.ActivityOptions.makeBasic();
+            opts.setLaunchDisplayId((int) id);
+            startActivity(getIntent().putExtra("on-secondary", true), opts.toBundle());
+        } catch (Exception e) {
+            return true; // permissão negada: fallback, roda nesta tela
+        }
+        main.postDelayed(new Runnable() {
+            @Override public void run() {
+                if (sSecondaryResumed) finish(); // a instância da tela de baixo assumiu
+                // senão: launch abortado pelo vendor — continuamos aqui (fallback)
+            }
+        }, 1200);
+        return true;
     }
 
     private void showPicker() {
@@ -136,17 +152,31 @@ public class MainActivity extends Activity {
         main.postDelayed(new Runnable() {
             @Override
             public void run() {
-                if (activeUrl == null) { probing = false; return; }
-                discovery.testAlive(activeUrl, alive -> {
-                    if (!alive) main.post(() -> showPicker());
-                    else main.postDelayed(this, 4000);
-                });
+                if (activeUrl == null || isFinishing() || isDestroyed()) { probing = false; return; }
+                try {
+                    discovery.testAlive(activeUrl, alive -> {
+                        if (isFinishing() || isDestroyed()) return;
+                        if (!alive) main.post(() -> showPicker());
+                        else main.postDelayed(this, 4000);
+                    });
+                } catch (java.util.concurrent.RejectedExecutionException e) {
+                    probing = false; // discovery já encerrada nesta instância
+                }
             }
         }, 4000);
     }
 
     @Override
+    protected void onNewIntent(android.content.Intent intent) {
+        super.onNewIntent(intent);
+        if (intent.hasExtra("on-secondary")) sSecondaryResumed = true;
+        setIntent(intent);
+    }
+
+    @Override
     protected void onDestroy() {
+        main.removeCallbacksAndMessages(null); // matar runnables pendentes (probe/relocate)
+        probing = false;
         if (discovery != null) discovery.stop(); // relocate() termina a atividade antes de iniciar
         super.onDestroy();
     }

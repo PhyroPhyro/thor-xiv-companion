@@ -61,6 +61,15 @@ README.md e no vault (`4. Projetos/Thor XIV Companion`).
   começava). Regra: em lista rolável NUNCA `touch-action:none` no item; usar touch events com
   `touchmove passive:false` e padrão hold-then-drag — pan imediato deixa o browser rolar; segurar ~250ms
   → `preventDefault` dali em diante → mover = drag; mover antes do arm = cancelar gesto próprio.
+- **AYN Thor: a tela de baixo é do vendor** (0.4.19): `rip.moth.cocoonshell/.ExternalDisplayActivity`
+  segura o display de apresentação (id 4); activity nossa aberta na tela de CIMA é morta por ele em
+  ~4s (o "pisca instantâneo" nunca foi crash de onCreate — foi kill do vendor + RejectedExecution no
+  probe com executor encerrado). `startActivity(launchDisplayId)` pelo app é negado silenciosamente.
+  Caminho único confiável para abrir na tela de baixo: `adb shell am start --display <id>` (shell tem
+  a permissão; o app, não).
+- **Verificação de app no Thor não pode ser `pidof`** (falso positivo clássico): o deploy-thor.sh exige
+  `Displayed com.phyro.thorxiv` no ActivityTaskManager + `topResumedActivity=.*thorxiv` + crash buffer
+  limpo; mudança de comportamento do app = reexecutar `bash scripts/deploy-thor.sh <apk>` e ler os PROBEs.
 - **Zip do plugin: sempre do output real do build** (v0.5.7): existiam DOIS `latest.zip` — o velho
   `bin/Release/latest.zip` (congelado no 0.5.1) e o correto `bin/Release/ThorXivBridge/latest.zip`
   (gerado a cada build). Copiei o velho 5 rodadas seguidas; o PC rodava 0.5.1 com DLL nova só no disco

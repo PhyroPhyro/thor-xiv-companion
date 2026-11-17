@@ -28,14 +28,32 @@ Write-Output (\"THOR-DEVICE: \" + \$id)
 & \$adb -s \$id install -r \$apk 2>&1 | Select-Object -Last 2
 \$v = & \$adb -s \$id shell dumpsys package com.phyro.thorxiv 2>&1 | Select-String 'versionName' | Select-Object -First 1
 Write-Output (\"THOR-INSTALLED: \" + \$id + ' ' + \$v)
-# -- verificação: abrir o app e checar crash --
-& \$adb -s \$id shell am force-stop com.phyro.thorxiv 2>&1 | Out-Null
-& \$adb -s \$id logcat -c 2>&1 | Out-Null; & \$adb -s \$id logcat -b crash -c 2>&1 | Out-Null
-& \$adb -s \$id shell am start -n com.phyro.thorxiv/.MainActivity 2>&1 | Out-Null
-Start-Sleep -Seconds 5
-\$alive = (& \$adb -s \$id shell pidof com.phyro.thorxiv 2>&1) -join ''
-\$crash = & \$adb -s \$id logcat -d -b crash 2>&1 | Select-String 'com.phyro.thorxiv'
-if (\$crash) { Write-Output 'THOR-CRASH:'; \$crash | Select-Object -First 6; exit 1 }
-if (-not \$alive -or \$alive -notmatch '^\d+') { Write-Output 'THOR-NOT-RUNNING (fechou sem stack de crash)'; & \$adb -s \$id logcat -d 2>&1 | Select-String 'thorxiv' | Select-Object -Last 8; exit 1 }
-Write-Output (\"THOR-OK: vivo, pid \" + \$alive)
+# -- verificacao: abrir na TELA DE BAIXO (display presentation) -- display <id> e exigir Displayed+resumed+sem crash
+# OBS vendor: abrir na tela de cima NAO funciona (cocoonshell ExternalDisplayActivity owns baixo e mata
+# activities alheias na de cima); relocate in-app e launch cross-display sao negados ao app.
+function Probe([string]\$label, [string[]]\$extra) {
+  & \$adb -s \$id shell am force-stop com.phyro.thorxiv 2>&1 | Out-Null
+  & \$adb -s \$id logcat -c 2>&1 | Out-Null
+  & \$adb -s \$id logcat -b crash -c 2>&1 | Out-Null
+  & \$adb -s \$id shell am start -n com.phyro.thorxiv/.MainActivity @\$extra 2>&1 | Out-Null
+  Start-Sleep -Seconds 10
+  \$crash = & \$adb -s \$id logcat -d -b crash 2>&1
+  \$disp  = & \$adb -s \$id logcat -d -s ActivityTaskManager 2>&1 | Select-String 'Displayed com.phyro.thorxiv'
+  \$pid2  = (& \$adb -s \$id shell pidof com.phyro.thorxiv 2>&1) -join ''
+  \$res   = & \$adb -s \$id shell dumpsys activity activities 2>&1 | Select-String 'topResumedActivity=.*thorxiv'
+  Write-Output (\"PROBE [\" + \$label + \"] displayed=\" + [bool]\$disp + \" resumed=\" + [bool]\$res + \" pid=\" + \$pid2)
+  if (\$crash -match 'thorxiv') { Write-Output \"PROBE-CRASH [\$(\$label)]:\"; \$crash | Select-String 'thorxiv' | Select-Object -First 25 }
+  if (-not \$disp -or (\$crash -match 'thorxiv')) { return \$false }
+  return [bool]\$res
+}
+\$dispId = ((& \$adb -s \$id shell dumpsys display 2>&1 | Select-String 'mDisplayId=') | ForEach-Object { ((\$_ -split '=')[1] -replace '\s','') } | Where-Object { \$_ -match '^\d+$' -and \$_ -ne '0' } | Select-Object -First 1)
+Write-Output (\"DISPLAYS: secundario=\" + \$dispId)
+if (-not \$dispId) { Write-Output 'THOR-NO-SECOND-DISPLAY'; exit 1 }
+\$ok = Probe 'tela-baixo' @('--display', \$dispId)
+if (-not \$ok) {
+  Write-Output 'THOR-NOT-RESUMED-NA-TELA-DE-BAIXO (talvez cocoonshell segure a display; abra pelo dock do Thor e valide manualmente)'
+  exit 1
+}
+Write-Output (\"THOR-OK: resumed na tela de baixo, sem crash (\" + \$NAME + ')')
+
 "
