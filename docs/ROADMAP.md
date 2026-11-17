@@ -72,6 +72,7 @@ Ordem sugerida: idioma+temes juntos (rodada leve), depois conexão/backup, resto
 
 ## T8 — App Android nativo (substituir WebView)
 
+- [x] Não rouba foco de gamepad/teclado do jogo (0.5.14): janela `FLAG_NOT_FOCUSABLE` no companion; foco temporário p/ IME via `ThorNative.requestTextFocus`
 - [ ] `Presentation` não-focusável como no padrão gen1recomp; vibration/haptic ao apertar macro
 - [ ] Slots de hotbar visíveis mesmo sem rede (último snapshot cacheado)
 - [ ] Atalho de tela + profile por jogo (integração Wayfinder)
