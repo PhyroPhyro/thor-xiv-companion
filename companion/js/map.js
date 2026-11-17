@@ -19,12 +19,17 @@
   const POI_AETHERYTE = gv("--poi-aetheryte");
   const POI_COMMERCE = gv("--poi-commerce");
   const POI_DEFAULT = gv("--poi-default");
+  const MAP_LABEL_INK = gv("--map-label-ink");
+  const MAP_LABEL_HALO = gv("--map-label-halo");
 
-  const POI_CACHE_KEY = "txpoi.v1";
   const POI_TIMEOUT_MS = 8000;
   const POI_LIMIT = 100;
 
-  // Ícones observados em dados reais da sheet MapMarker (XIVAPI v2, conferido com curl).
+  // POIs do jogo vivem so por zona/sessao: cache em memoria (mapRowId -> lista),
+  // sem persistir em localStorage (txpoi.v1 aposentado p/ essa fonte).
+  const POI_MEM = new Map();
+
+  const MAP_CACHE_KEY = "txmap.v1";
   // 60311 = aetheryte (confere: marca as pedras de invocação / aetherytes).
   // Nenhum ícone de comércio/lojista apareceu nos conjuntos coletados; a classe
   // fica definida para receber ids reais quando confirmados pelos dados.
@@ -34,7 +39,6 @@
   const POI_AETHERNET_ICONS = new Set([60311]);
   const POI_DISTRICT_ICONS = new Set([60441]);
 
-  const MAP_CACHE_KEY = "txmap.v1";
   const RESOLVE_TIMEOUT_MS = 6000;
   const XIVAPI_BASE = "https://v2.xivapi.com";
   const Y_FLIP = true; // v. teste de marco: true se norte-sul espelhado na imagem do xivapi
@@ -71,6 +75,7 @@
       this.buf = [];           // últimas coords da zona
       this.lastPos = null;
       this.pois = null; // marcadores da zona atual (null = ainda não carregados; [] = nenhum)
+      this.poiSource = null; // "game" | "api" | null — fonte dos this.pois (jogo ou fallback xivapi)
 
       this.bindHUD();
       this.bindInput();
@@ -88,6 +93,7 @@
         this.loading = false;
         this.pendingZoneId = null;
         this.pois = null;
+        this.poiSource = null;
         return;
       }
       if (this.zoneId === zoneId) {
@@ -111,6 +117,7 @@
       this.manualAnchor = null;
       this.lastPos = null;
       this.pois = null; // troca de zona: limpa marcadores antigos imediatamente, nunca POI de zona errada
+      this.poiSource = null;
       await this.resolveAndLoad(zoneId);
       this.loading = false;
       // a zona pode ter trocado enquanto a rede aguardava
@@ -212,17 +219,14 @@
     }
 
     // Busca os marcadores da sheet MapMarker para o mapa da zona (rowId da linha Map).
+    // FALLBACK do xivapi: so usado quando o jogo nao fornece state.pois (fora do jogo).
     // 1 HTTP por página; segue o cursor `next` até esgotar. Timeout 8s, falha silenciosa.
     // Resultado: this.pois = [{x, y, icon, name}] em valores brutos da API (X,Y ~0..1024),
-    // cache em localStorage (txpoi.v1) chaveado por mapRowId.
+    // cache apenas em memoria (POI_MEM, chaveado por mapRowId) — sem localStorage.
     async loadPois(mapRowId) {
-      if (this.pois != null) return; // já carregado (ou tentativa feita) para esta zona
-      let cache = {};
-      try {
-        cache = JSON.parse(localStorage.getItem(POI_CACHE_KEY) || "{}");
-      } catch (e) { /* localStorage indisponível — segue sem cache */ }
-      const hit = cache[mapRowId];
-      if (hit) { this.pois = hit; return; }
+      if (this.pois != null) return; // já carregado para esta zona (jogo ou API)
+      const hit = POI_MEM.get(mapRowId);
+      if (hit) { this.pois = hit; this.poiSource = "api"; return; }
 
       const pois = [];
       let cursor = null;
@@ -263,11 +267,18 @@
       }
 
       this.pois = pois; // [] quando não há marcadores ou a busca falhou
-      this.jserr("loadPois row=" + mapRowId + " -> " + pois.length + " marcadores");
-      try {
-        cache[mapRowId] = pois;
-        localStorage.setItem(POI_CACHE_KEY, JSON.stringify(cache));
-      } catch (e) { /* sem cache — segue sem gravar */ }
+      this.poiSource = "api"; // fallback ativo: badge discreto no render
+      this.jserr("loadPois row=" + mapRowId + " -> " + pois.length + " marcadores (API)");
+      POI_MEM.set(mapRowId, pois); // apenas memoria, nada de localStorage
+    }
+
+    // Recebe os POIs do estado do jogo (state.pois, ja em px2048 alinhados ao pino do player).
+    // Chame a cada novo estado, apos loadImage da zona, para que os marcadores do jogo
+    // sobrescrevam o fallback da API e nunca mostrem marcador de zona errada.
+    setPois(pois) {
+      const have = Array.isArray(pois) && pois.length > 0;
+      this.pois = have ? pois : null; // null => sem dados do jogo: fallback xivapi rearma
+      this.poiSource = have ? "game" : null;
     }
 
     // ---- viewport ----
@@ -528,17 +539,22 @@
           ctx.stroke();
           // label embaixo do marcador: fade progressivo com o zoom (invisível no zoom-out,
           // legível conforme aproxima) — não polui a vista geral
-          if (p.name) {
+          const nm = p.label || p.name ||
+            (kind === "aetheryte" ? "Aetheryte" : kind === "aethernet" ? "Aethernet Node" : "");
+          if (nm) {
             const a = Math.min(1, Math.max(0, (this.scale - 1.15) / 1.1));
             if (a > 0.04) {
               ctx.save();
               ctx.globalAlpha = a;
-              ctx.fillStyle = col;
               ctx.font = Math.round(9 + 3 * (this.scale - 1)) + "px sans-serif";
               ctx.textAlign = "center";
               ctx.textBaseline = "top";
-              const nm = p.name.length > 16 ? p.name.slice(0, 15) + "\u2026" : p.name;
-              ctx.fillText(nm, sx, sy + r + 3);
+              const lx = sx, ly = sy + r + 3;
+              ctx.lineWidth = 3;
+              ctx.strokeStyle = MAP_LABEL_HALO;
+              ctx.strokeText(nm, lx, ly);
+              ctx.fillStyle = MAP_LABEL_INK;
+              ctx.fillText(nm, lx, ly);
               ctx.restore();
             }
           }
@@ -561,6 +577,16 @@
       }
 
       // status do mapa online (badge discreto em um canto, definido uma única vez por zona)
+      if (this.poiSource === "api") {
+        // fallback do xivapi (fora do jogo): aviso discreto, acima do badge de status
+        ctx.fillStyle = MAP_OFFLINE;
+        ctx.font = "12px sans-serif";
+        ctx.textAlign = "end";
+        ctx.textBaseline = "bottom";
+        ctx.fillText("POI aproximado (API)", W - 10, H - 26);
+        ctx.textAlign = "start";
+        ctx.textBaseline = "alphabetic";
+      }
       if (this.resolved === false) {
         this.drawBadge(ctx, W, H, "mapa offline");
       } else if (!this.img && this.loading) {

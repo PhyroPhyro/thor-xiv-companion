@@ -123,6 +123,12 @@
     render(s) {
       state = s;
       window.__txState = s;
+      const zoneId = s.zone ? s.zone.id : null;
+      minimap.loadImage(zoneId);
+      if (Array.isArray(s.pois)) {
+        const zn = state && state.zone ? state.zone.name : "";
+        minimap.setPois(s.pois.map((q) => (q.name === zn ? Object.assign({}, q, { name: "" }) : q)));
+      } // jogo: pois do estado; ausente => fallback xivapi
       const zone = s.zone ? s.zone.name : "—";
       $("zone-name").textContent = s.loggedIn ? zone : "sem personagem (não logado)";
       $("map-name").textContent = s.map ? s.map.name : "";

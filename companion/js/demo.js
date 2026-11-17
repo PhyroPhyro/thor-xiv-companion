@@ -63,6 +63,13 @@
       loggedIn: true,
       zone: { id: zone.id, name: zone.name },
       map: { id: zone.mapId, name: zone.name },
+      pois: zone.id === 399
+        ? [
+          { x: 1390, y: 1150, icon: 60453, name: "Aetheryte — The Goblet" },
+          { x: 1100, y: 900, icon: 60311, name: "Aethernet" },
+          { x: 1700, y: 1400, icon: 60441, name: "District" },
+        ]
+        : [],
       player: {
         name: "Phyro Axelpin", jobId: job.jobId, job: job.job, level: job.level,
         hp: Math.floor(hpPct * 432100), maxHp: 432100,

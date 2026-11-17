@@ -25,6 +25,12 @@ public sealed class StateCollector
 
     private bool _loggedWarn;
 
+    // Cache de POIs do mapa atual (AgentMap do jogo). Regenera apenas quando
+    // CurrentMapId/CurrentTerritoryId mudam — nunca por frame.
+    private string _poisJson = "[]";
+    private uint _poisMapId;
+    private uint _poisTerritory;
+
     public StateCollector(IClientState clientState, IDataManager dataManager, IPartyList partyList, IObjectTable objectTable, ActionCatalog catalog, IPluginLog log, ChatWatcher? chat, string bridgeVersion)
     {
         _bridgeVersion = bridgeVersion;
@@ -56,6 +62,7 @@ public sealed class StateCollector
                 sb.Append("\"zone\":null,\"map\":null,\"player\":null,\"target\":null,\"party\":[]");
                 AppendCooldowns(sb);
                 if (_chat != null) sb.Append(",\"chat\":").Append(_chat.SnapshotJson());
+                sb.Append(",\"pois\":[]");
                 sb.Append('}');
                 return sb.ToString();
             }
@@ -77,6 +84,7 @@ public sealed class StateCollector
             sb.Append("\"error\":true");
         }
 
+        sb.Append(",\"pois\":").Append(BuildPoisJson());
         sb.Append('}');
         return sb.ToString();
     }
@@ -291,4 +299,71 @@ public sealed class StateCollector
 
     private static string Fmt(float f) =>
         f.ToString("0.####", CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// POIs of the current map, from the game's AgentMap (definitive source, replaces xivapi).
+    /// Each entry: {x, y} in px2048 (same texture space the player pin projects to), icon (IconId)
+    /// and name (Subtext). Converted by the plugin through the px -> world -> coord chain using
+    /// the same MapUtil + SizeFactor/offset that generate the player pin, so alignment is
+    /// guaranteed by construction: coord = px*2/SF + 1 + 0.02*offset
+    /// (derived from composing WorldToMap with world = (px - 1024)*100/SF; see /tmp/opencode/poi-math.mjs).
+    /// Regenerated only when CurrentMapId/CurrentTerritoryId change.
+    /// </summary>
+    private unsafe string BuildPoisJson()
+    {
+        if (!_clientState.IsLoggedIn)
+        {
+            _poisMapId = 0;
+            _poisTerritory = 0;
+            return "[]";
+        }
+        try
+        {
+            var agentPtr = FFXIVClientStructs.FFXIV.Client.UI.Agent.AgentMap.Instance();
+            if (agentPtr == null) return "[]";
+            // stack copy of the struct: the fixed buffers (FixedSizeArrayN) travel along,
+            // and Span<T> properties can be read without pointer arithmetic.
+            var agent = *agentPtr;
+            var mapId = agent.CurrentMapId;
+            var territory = agent.CurrentTerritoryId;
+            if (mapId == _poisMapId && territory == _poisTerritory && _poisJson.Length > 2)
+                return _poisJson;
+            _poisMapId = mapId;
+            _poisTerritory = territory;
+            _poisJson = BuildPoisArrayJson(ref agent);
+            return _poisJson;
+        }
+        catch
+        {
+            return "[]";
+        }
+    }
+
+    private unsafe string BuildPoisArrayJson(ref FFXIVClientStructs.FFXIV.Client.UI.Agent.AgentMap agent)
+    {
+        var sb = new System.Text.StringBuilder(4096);
+        sb.Append('[');
+        var markers = agent.MapMarkers;
+        // MapMarkerCount can lag until the map UI initializes once per zone; scan the
+        // bounded array and rely on IconId==0 to skip empty slots.
+        int count = markers.Length;
+        if (agent.MapMarkerCount > 0 && agent.MapMarkerCount < count) count = agent.MapMarkerCount;
+        int n = 0;
+        for (int i = 0; i < count && n < 600; i++)
+        {
+            ref var info = ref markers[i];
+            var m = info.MapMarker;
+            if (m.IconId == 0) continue; // empty slot
+            // X/Y are already px2048 of the map texture (same space as the player pin);
+            // the PWA converts px->coord with the same scale (xImg/yImg), without re-applying the offset.
+            if (m.X < 0 || m.X > 2048 || m.Y < 0 || m.Y > 2048) continue; // off the texture
+            var name = m.Subtext.HasValue ? m.Subtext.ToString() : "";
+            if (n++ > 0) sb.Append(',');
+            sb.Append("\"x\":").Append(Fmt(m.X)).Append(",\"y\":").Append(Fmt(m.Y))
+              .Append(",\"icon\":").Append(m.IconId)
+              .Append(",\"name\":").Append(System.Text.Json.JsonSerializer.Serialize(name));
+        }
+        sb.Append(']');
+        return sb.ToString();
+    }
 }

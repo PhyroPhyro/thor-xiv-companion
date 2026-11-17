@@ -52,4 +52,6 @@
 --poi-aetheryte: #22d3ee;      /* ciano — aetheryte/aethernet */
 --poi-commerce: var(--gold);   /* dourado — comércio/lojistas */
 --poi-default: #7d8ea8;        /* cinza sutil — demais (portões, fontes, etc.) */
+--map-label-ink: #1a1a14;      /* preto-quase do texto das labels de POI (mapa de papel claro) */
+--map-label-halo: rgba(248,244,232,.92); /* halo branco atrás da label p/ contraste */
 }
