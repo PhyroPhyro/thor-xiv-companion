@@ -369,7 +369,9 @@
       const fit = this.img ? Math.min(c.width / iw, c.height / ih) : Math.min(c.width / iw, c.height / ih);
       const s_eff = this.scale * fit;
       this.cx -= dx * (2 / this.SF.x) * (2048 / iw) / s_eff;
-      this.cy += dy * (2 / this.SF.y) * (2048 / ih) / s_eff;
+      // Y_FLIP: coord cresce para o sul (baixo da tela). Arrastar o dedo p/ baixo (dy>0)
+      // deve DESLIZAR o mapa p/ baixo => janela sobe p/ norte => coord do centro DIMINUI.
+      this.cy += (Y_FLIP ? -dy : dy) * (2 / this.SF.y) * (2048 / ih) / s_eff;
       this.manualAnchor = this.lastCoords ? { x: this.lastCoords.x, y: this.lastCoords.y } : null;
       this.clamp();
       this.syncFollowBtn();
@@ -472,10 +474,12 @@
           const py = this.yImg(cy);
           const sx = W / 2 + (px - cx_img) * s_eff;
           const sy = H / 2 + (py - cy_img) * s_eff;
-          if (sx < -24 || sx > W + 24 || sy < -24 || sy > H + 24) continue;
           const kind = POI_AETHERYTE_ICONS.has(p.icon) ? "aetheryte"
             : (POI_COMMERCE_ICONS.has(p.icon) ? "commerce" : "default");
-          const r = kind === "aetheryte" ? 8 : (kind === "commerce" ? 7 : 6);
+          // tamanho dinâmico: no zoom 1 o POI é quase o pino do jogador (10px) e cresce com o zoom
+          const base = kind === "aetheryte" ? 9 : (kind === "commerce" ? 8 : 7);
+          const r = Math.min(28, base * (0.95 + 0.45 * (this.scale - 1)));
+          if (sx < -r - 8 || sx > W + r + 8 || sy < -r - 8 || sy > H + r + 8) continue;
           ctx.beginPath();
           if (kind === "aetheryte") {
             // losango
@@ -487,13 +491,13 @@
           ctx.fillStyle = kind === "aetheryte" ? POI_AETHERYTE
             : (kind === "commerce" ? POI_COMMERCE : POI_DEFAULT);
           ctx.fill();
-          if (kind !== "default") {
-            ctx.lineWidth = 1.5; ctx.strokeStyle = MAP_PIN_STROKE; ctx.stroke();
-          }
+          ctx.lineWidth = kind === "default" ? 1 : 1.5;
+          ctx.strokeStyle = MAP_PIN_STROKE;
+          ctx.stroke();
           // rótulo curto apenas com zoom razoável
-          if (kind === "aetheryte" && this.scale >= 2 && p.name) {
+          if (kind === "aetheryte" && this.scale >= 1.6 && p.name) {
             ctx.fillStyle = POI_AETHERYTE;
-            ctx.font = "10px sans-serif";
+            ctx.font = Math.round(9 + 3 * (this.scale - 1)) + "px sans-serif";
             ctx.fillText(p.name.length > 14 ? p.name.slice(0, 13) + "\u2026" : p.name, sx + r + 5, sy + 4);
           }
         }
