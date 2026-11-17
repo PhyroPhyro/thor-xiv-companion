@@ -69,7 +69,6 @@
       </div>
       <div id="hb-editor" class="hidden"></div>
       <div id="hb-confirm" class="hidden"></div>
-      <div id="hb-gridcfg" class="hidden"></div>
       <div id="hb-tooltip" class="hidden">
         <div class="hb-tooltip-card">
           <div id="hb-tt-name" class="hb-tt-name"></div>
@@ -89,6 +88,9 @@
     document.addEventListener("pointerup", onGlobalUp);
     document.addEventListener("pointercancel", onGlobalUp);
 
+    // WebView: long-press não pode abrir o menu de contexto do navegador (mata o drag)
+    wrap.addEventListener("contextmenu", (e) => e.preventDefault());
+
     // toque em qualquer lugar fecha o tooltip; o toque que fecha NÃO dispara a ação do elemento tocado (FFXIV)
     document.addEventListener("pointerdown", (e) => {
       if (!ttOpen) return;
@@ -98,6 +100,7 @@
   }
 
   function renderGrid() {
+    grid.innerHTML = ""; // sempre limpa: renderGrid re-renderiza do zero (não acumula)
     const p = PRESETS[gridPreset];
     grid.style.gridTemplateColumns = `repeat(${p.c}, 1fr)`;
     grid.style.gridTemplateRows = `repeat(${p.r}, 1fr)`;
@@ -163,12 +166,15 @@
     if (ev.pointerType === "mouse" && ev.button !== 0) return;
     cancelPress();
     pi = { idx: i, el: b, s, x: ev.clientX, y: ev.clientY, armed: false, tooltipShown: false, dragging: false, src: -1, ghost: null, overEl: null, timer: null };
-    const onArm = s ? () => { showSlotTooltip(s); pi.tooltipShown = true; } : null;
-    pi.timer = setTimeout(() => {
-      pi.armed = true;
-      pi.timer = null;
-      if (onArm) onArm();
-    }, TOOLTIP_MS);
+    // tooltip por long-press só FORA do editMode; em editMode o segurar+voltar é drag (sem tooltip no caminho)
+    if (s && !editMode) {
+      pi.timer = setTimeout(() => {
+        pi.armed = true;
+        pi.timer = null;
+        showSlotTooltip(s);
+        pi.tooltipShown = true;
+      }, TOOLTIP_MS);
+    }
   }
 
   function cancelPress() {
@@ -418,10 +424,14 @@
   function kindIcon(s) { return s.icon == null ? (s.kind === "skill" ? "✦" : "") : s.icon; }
   function closeEditor() { editIdx = -1; hideTooltip(); const el = $("hb-editor"); if (el) { el.classList.add("hidden"); el.innerHTML = ""; } }
 
-  // ---- configuracao da grade (popover ancorado no botao Config) ----
+  // ---- configuracao da grade (popover pequeno, CENTRALIZADO na tela, anexado ao body) ----
   function openConfig() {
-    const el = $("hb-gridcfg");
-    const p = PRESETS[gridPreset];
+    let el = $("hb-gridcfg");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "hb-gridcfg";
+      document.body.appendChild(el); // fora do wrap: nenhum ancestral afeta o posicionamento
+    }
     el.innerHTML = `
       <div class="hb-pop-head"><span class="panel-title">Grade</span>
         <button class="btn btn-ghost" id="cfg-close">Fechar</button></div>
@@ -438,15 +448,7 @@
       bt.onclick = () => applyPreset(k);
       cont.appendChild(bt);
     });
-    // ancora: logo abaixo do botao Config, alinhado a direita dele
-    el.classList.remove("hidden");
-    const btn = $("hb-gridbtn").getBoundingClientRect();
-    const r = el.getBoundingClientRect();
-    const w = r.width || 340;
-    let left = btn.right - w;
-    if (left < 8) left = 8;
-    el.style.left = Math.round(left) + "px";
-    el.style.top = Math.round(btn.bottom + 8) + "px";
+    el.classList.remove("hidden"); // centralizado via CSS (sem ancoragem JS)
     $("cfg-close").onclick = closeConfig;
     document.addEventListener("pointerdown", cfgOutside, true);
   }

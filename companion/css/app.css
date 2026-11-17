@@ -143,7 +143,12 @@ body {
   transition: transform .06s, border-color .2s, box-shadow .2s;
   height: 100%; min-height: 64px;
   text-shadow: var(--text-shadow);
+  /* touch: sem menu de contexto/scroll roubindo o gesto do drag/long-press */
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none; user-select: none;
 }
+.hb-ico-img, .hb-drag-img { pointer-events: none; -webkit-touch-callout: none; }
 .hb-slot:active { transform: scale(.94); }
 .hb-slot.editing { border-style: dashed; }
 .hb-grid.editing .hb-slot, .editing .hb-slot { border-color: var(--border-inner); }
@@ -219,8 +224,8 @@ body {
 .hb-tt-name { font-weight: 700; font-size: 16px; color: var(--text); }
 .hb-tt-desc { margin-top: 6px; font-size: 14px; color: var(--text-muted); line-height: 1.45; word-wrap: break-word; }
 .hb-tt-id { margin-top: 8px; font-size: 12px; font-family: ui-monospace, monospace; color: var(--text-muted); }
-/* popover de configuracao da grade (ancorado no botao Config, tamanho minimo) */
-#hb-gridcfg { position: fixed; z-index: 45; width: min(360px, 94vw); background: var(--panel-solid); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 8px 24px var(--shadow); padding: 10px 12px 12px; }
+/* popover de configuracao da grade (pequeno, centralizado na tela, anexado ao body) */
+#hb-gridcfg { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 70; width: min(360px, 94vw); max-height: 80vh; overflow-y: auto; background: var(--panel-solid); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 8px 24px var(--shadow); padding: 10px 12px 12px; }
 .hb-pop-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
 .hb-pop-hint { font-size: 12px; margin-bottom: 6px; }
 .hb-presets { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }

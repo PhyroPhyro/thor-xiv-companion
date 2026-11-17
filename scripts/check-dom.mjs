@@ -20,10 +20,14 @@ for (const id of staticIds) {
   if (staticIds.filter((x) => x === id).length > 1) fail(`id "${id}" duplicado no index.html`);
 }
 
-// ids definidos em innerHTML/templates dos JS (heurística: id="..." no código)
+// ids definidos em innerHTML/templates dos JS (heurística: id="..." e .id = "..." no código)
 const dynamicIds = new Set();
 for (const [, src] of js) {
   for (const m of src.matchAll(/id="([^"]+)"/g)) {
+    if (dynamicIds.has(m[1])) fail(`id "${m[1]}" definido 2x em templates JS`);
+    dynamicIds.add(m[1]);
+  }
+  for (const m of src.matchAll(/\.id\s*=\s*["']([^"']+)["']/g)) {
     if (dynamicIds.has(m[1])) fail(`id "${m[1]}" definido 2x em templates JS`);
     dynamicIds.add(m[1]);
   }

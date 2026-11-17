@@ -55,6 +55,13 @@ README.md e no vault (`4. Projetos/Thor XIV Companion`).
   de ligar handlers → hotbar vazia e botões mortos por 3 versões (o overlay full-screen do Config
   escondia o problema). Regra: referenciar `$(...)` no momento do uso ou atribuir após o innerHTML;
   nunca capturar em escopo de carga um id que só nasce em template.
+- **Re-render = limpar antes de appendChild** (v0.5.6): `renderGrid()` sem `innerHTML = ""`
+  acumulava os slots a cada chamada (grid duplicava e "embaralhava" ao alternar Editar/Pronto).
+  Regra: toda função de render limpa o contêiner antes de recriar.
+- **WebView: gesto é seu ou do navegador** (v0.5.6): long-press em slot abria o menu de contexto
+  do WebView e o scroll roubava o pointer (pointercancel) — drag/long-press morriam. Regra:
+  em elementos com drag/long-press, aplicar `touch-action: none`, `-webkit-touch-callout: none`,
+  `user-select: none`, `contextmenu` com preventDefault e `pointer-events: none` nas `<img>`.
 - **Overlay = menor forma possível** (v0.5.3): nada de modal full-screen para conteúdo pequeno
   (menu de opções, presets). Usar popover ancorado no gatilho (`position:fixed` alinhado ao
   `getBoundingClientRect()` do botão), com fechamento por toque fora dele + botão Fechar. Modal
