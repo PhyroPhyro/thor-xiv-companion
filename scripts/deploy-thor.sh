@@ -28,4 +28,14 @@ Write-Output (\"THOR-DEVICE: \" + \$id)
 & \$adb -s \$id install -r \$apk 2>&1 | Select-Object -Last 2
 \$v = & \$adb -s \$id shell dumpsys package com.phyro.thorxiv 2>&1 | Select-String 'versionName' | Select-Object -First 1
 Write-Output (\"THOR-INSTALLED: \" + \$id + ' ' + \$v)
+# -- verificação: abrir o app e checar crash --
+& \$adb -s \$id shell am force-stop com.phyro.thorxiv 2>&1 | Out-Null
+& \$adb -s \$id logcat -c 2>&1 | Out-Null; & \$adb -s \$id logcat -b crash -c 2>&1 | Out-Null
+& \$adb -s \$id shell am start -n com.phyro.thorxiv/.MainActivity 2>&1 | Out-Null
+Start-Sleep -Seconds 5
+\$alive = (& \$adb -s \$id shell pidof com.phyro.thorxiv 2>&1) -join ''
+\$crash = & \$adb -s \$id logcat -d -b crash 2>&1 | Select-String 'com.phyro.thorxiv'
+if (\$crash) { Write-Output 'THOR-CRASH:'; \$crash | Select-Object -First 6; exit 1 }
+if (-not \$alive -or \$alive -notmatch '^\d+') { Write-Output 'THOR-NOT-RUNNING (fechou sem stack de crash)'; & \$adb -s \$id logcat -d 2>&1 | Select-String 'thorxiv' | Select-Object -Last 8; exit 1 }
+Write-Output (\"THOR-OK: vivo, pid \" + \$alive)
 "

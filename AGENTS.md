@@ -14,7 +14,7 @@ README.md e no vault (`4. Projetos/Thor XIV Companion`).
 1. Fazer as alterações.
 2. Build: `DALAMUD_HOME=/root/.xlcore/dalamud/Hooks/dev dotnet build dalamud-plugin/ThorXivBridge -c Release` → 0 erros.
 3. Smoke: `dotnet build tests/ServerHarness -c Release` + harness + `node scripts/smoke.mjs <porta> <dir-pwa>` → SMOKE PASSOU
-3b. (opcional, quando Thor conectado ao PC) `scripts/deploy-pc.sh <zip> <apk>` roda o Thor automaticamente via adb
+3b. (Thor conectado ao PC) `scripts/deploy-pc.sh <zip> <apk>` instala no Thor via adb E valida (abre o app, `THOR-OK` = vivo sem crash). Mudança só de APK: `scripts/deploy-thor.sh <apk>` (plugin inalterado dispensa zip; bump só no APK)
    (o smoke inclui `scripts/check-dom.mjs`: ids únicos, referências válidas e nenhuma captura
    top-level de id criado dinamicamente — o smoke NÃO executa JS da PWA, o check-dom cobre isso).
 4. Bump de versão no csproj (breaking → minor; fix → patch) e gerar `dist/ThorXivBridge-<v>.zip`.
@@ -68,6 +68,7 @@ README.md e no vault (`4. Projetos/Thor XIV Companion`).
   `AssemblyVersion` do `ThorXivBridge.json` E o tamanho/hash do DLL — hash local que casa com zip velho
   não prova nada.
 - **Delegações Hermes: checar unicode sujo** (0.5.11): o operário escreveu comentários com acentos decompostos (NFD) e soft-hyphen (U+00AD) — invisíveis, mas quebram grep/normalize. Regra: após rodada do Hermes, `python3` scan de `\u00ad \u0301 \u0131` nos js/css/html alterados + NFC normalize.
+- **MainActivity relocate() → finish() com campos não inicializados** (0.4.17): `relocateToSecondScreen()` dá `return` cedo na tela de cima; `onDestroy` rodava `discovery.stop()` com `discovery` null → crash em loop ao abrir o app. Regra: ciclo de vida de Activity nunca assume estado criado (null-guard em onDestroy); e TODO deploy no Thor passa por `deploy-thor.sh`, que agora instala, ABRE o app e só sai `THOR-OK` se o processo segue vivo sem stack no buffer de crash (abrir via adb cai na tela de cima e relocate é o caminho crítico de teste real).
 - **Re-render = limpar antes de appendChild** (v0.5.6): `renderGrid()` sem `innerHTML = ""`
   acumulava os slots a cada chamada (grid duplicava e "embaralhava" ao alternar Editar/Pronto).
   Regra: toda função de render limpa o contêiner antes de recriar.

@@ -147,7 +147,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        discovery.stop();
+        if (discovery != null) discovery.stop(); // relocate() termina a atividade antes de iniciar
         super.onDestroy();
     }
 
