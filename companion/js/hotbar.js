@@ -87,6 +87,9 @@
     document.addEventListener("pointermove", onGlobalMove);
     document.addEventListener("pointerup", onGlobalUp);
     document.addEventListener("pointercancel", onGlobalUp);
+    document.addEventListener("touchmove", onTouchMove, { passive: false });
+    document.addEventListener("touchend", onTouchEnd);
+    document.addEventListener("touchcancel", onTouchCancel);
 
     // WebView: long-press não pode abrir o menu de contexto do navegador (mata o drag)
     wrap.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -154,27 +157,46 @@
     showTooltip(name, desc, idLine);
   }
 
-  // ---- reconhecedor de press do slot (tooltip vs arraste vs tap) ----
+  // ---- reconhecedor de press do slot ----
+  // TOUCH (WebView/Thor): touch events — pan imediato = scroll do navegador;
+  // segurar HOLD_DRAG_MS e depois mover = drag (preventDefault a partir do arm);
+  // tap curto = ação. Mouse (desktop): pointer events, drag por movimento.
+  const HOLD_DRAG_MS = 250;
   function setupSlot(b, s, i) {
-    b.addEventListener("pointerdown", (ev) => startPress(ev, b, s, i), { passive: true });
-    b.addEventListener("pointercancel", cancelPress);
+    b.addEventListener("touchstart", (ev) => startTouch(ev, b, s, i), { passive: true });
+    b.addEventListener("pointerdown", (ev) => { if (ev.pointerType === "mouse") startPress(ev, b, s, i); });
+    b.addEventListener("pointercancel", () => { if (pi && !pi.touch) cancelPress(); });
     b.addEventListener("click", (ev) => { if (blockClick) { ev.stopImmediatePropagation(); blockClick = false; } });
   }
 
-  function startPress(ev, b, s, i) {
-    if (Date.now() < ttSuppressUntil) return; // toque que fechou o tooltip: ignora tudo
-    if (ev.pointerType === "mouse" && ev.button !== 0) return;
+  function makePi(i, el, s, x, y, isTouch) {
+    return { idx: i, el, s, x, y, touch: isTouch, armed: false, holdArmed: false, moved: false, tooltipShown: false, dragging: false, src: -1, ghost: null, overEl: null, timer: null, touchId: null };
+  }
+
+  function startPress(ev, b, s, i) { // mouse
+    if (Date.now() < ttSuppressUntil) return;
+    if (ev.button !== 0) return;
     cancelPress();
-    pi = { idx: i, el: b, s, x: ev.clientX, y: ev.clientY, armed: false, tooltipShown: false, dragging: false, src: -1, ghost: null, overEl: null, timer: null };
-    // tooltip por long-press só FORA do editMode; em editMode o segurar+voltar é drag (sem tooltip no caminho)
-    if (s && !editMode) {
-      pi.timer = setTimeout(() => {
-        pi.armed = true;
-        pi.timer = null;
-        showSlotTooltip(s);
-        pi.tooltipShown = true;
-      }, TOOLTIP_MS);
-    }
+    pi = makePi(i, b, s, ev.clientX, ev.clientY, false);
+    pi.timer = setTimeout(() => {
+      pi.armed = true; pi.timer = null;
+      if (s && !editMode) { showSlotTooltip(s); pi.tooltipShown = true; }
+      else if (editMode && s) pi.el.classList.add("hb-dragging");
+    }, TOOLTIP_MS);
+  }
+
+  function startTouch(ev, b, s, i) { // WebView/Thor
+    if (Date.now() < ttSuppressUntil) return;
+    cancelPress();
+    const t = ev.changedTouches[0];
+    pi = makePi(i, b, s, t.clientX, t.clientY, true);
+    pi.touchId = t.identifier;
+    pi.timer = setTimeout(() => {
+      if (!pi) return;
+      pi.holdArmed = true; pi.timer = null;
+      if (editMode && pi.s) pi.el.classList.add("hb-dragging"); // levanta o slot; mover = drag
+      else if (pi.s) { showSlotTooltip(pi.s); pi.tooltipShown = true; }
+    }, editMode ? HOLD_DRAG_MS : TOOLTIP_MS);
   }
 
   function cancelPress() {
@@ -185,25 +207,41 @@
   }
 
   function endDragVisuals() {
+    if (!pi) return;
     if (pi.ghost) { pi.ghost.remove(); pi.ghost = null; }
     if (pi.overEl) { pi.overEl.classList.remove("hb-drag-over"); pi.overEl = null; }
     if (pi.el) pi.el.classList.remove("hb-dragging");
   }
 
+  // MOUSE (pointer events)
   function onGlobalMove(ev) {
-    if (!pi) return;
+    if (!pi || pi.touch) return;
     if (pi.dragging) { placeGhost(ev); updateDragOver(ev); return; }
     if (pi.armed) return; // tooltip mostrando: prioridade, nunca vira arraste
     const dx = Math.abs(ev.clientX - pi.x), dy = Math.abs(ev.clientY - pi.y);
     if (dx > DRAG_THRESHOLD || dy > DRAG_THRESHOLD) {
       clearTimeout(pi.timer); pi.timer = null;
       pi.armed = false;
-      if (editMode && pi.s) {
-        beginDrag(ev);
-      } else {
-        cancelPress(); // fora de editMode ou slot vazio: não há arraste
-      }
+      if (editMode && pi.s) beginDrag(ev);
+      else cancelPress(); // fora de editMode ou slot vazio: não há arraste
     }
+  }
+
+  // TOUCH: decide scroll vs drag vs tooltip; preventDefault só depois do hold (scroll continua funcionando)
+  function onTouchMove(ev) {
+    if (!pi || !pi.touch) return;
+    const t = touchById(ev.changedTouches, pi.touchId);
+    if (!t) return;
+    if (pi.dragging) { ev.preventDefault(); placeGhost(t); updateDragOver(t); return; }
+    const dx = Math.abs(t.clientX - pi.x), dy = Math.abs(t.clientY - pi.y);
+    if (dx > DRAG_THRESHOLD || dy > DRAG_THRESHOLD) pi.moved = true;
+    if (pi.moved && !pi.holdArmed && !pi.dragging) { cancelPress(); return; } // virou scroll: sem drag/tooltip neste gesto
+    if (pi.holdArmed) { ev.preventDefault(); } // gesto garantido p/ nós: sem scroll daqui pra frente
+    if (pi.moved && pi.holdArmed && editMode && pi.s && !pi.dragging) beginDrag(t);
+  }
+  function touchById(list, id) {
+    for (let i = 0; i < list.length; i++) if (list[i].identifier === id) return list[i];
+    return null;
   }
 
   function beginDrag(ev) {
@@ -243,26 +281,39 @@
     if (target) target.classList.add("hb-drag-over");
   }
 
+  // MOUSE (pointer events)
   function onGlobalUp(ev) {
-    if (!pi) return;
+    if (!pi || pi.touch) return;
     if (pi.dragging) { doDrop(); cleanupPress(); return; }
-    // não arrastando: pointerup num slot (ou em qualquer lugar)
     if (pi.tooltipShown) {
-      // tooltip permanece aberto; o toque que fecha não dispara nada (suprimido abaixo no próximo pointerdown)
       blockClick = true; setTimeout(() => blockClick = false, 600);
       cleanupPress();
       return;
     }
-    // tap curto (timer não armado)
     if (Date.now() < ttSuppressUntil) { cleanupPress(); return; }
     clearTimeout(pi.timer); pi.timer = null;
     tapSlot(pi.s, pi.idx, pi.el);
     cleanupPress();
   }
 
+  // TOUCH
+  function onTouchEnd(ev) {
+    if (!pi || !pi.touch) return;
+    const p = pi;
+    if (p.dragging) { doDrop(); cleanupPress(); return; }
+    if (Date.now() < ttSuppressUntil) { cleanupPress(); return; }
+    if (p.tooltipShown) { ttSuppressUntil = Date.now() + 600; cleanupPress(); return; } // tooltip fica aberta; toque não age
+    if (p.moved) { cleanupPress(); return; } // era scroll
+    clearTimeout(p.timer); p.timer = null;
+    tapSlot(p.s, p.idx, p.el);
+    cleanupPress();
+  }
+  function onTouchCancel() { if (pi && pi.touch) cancelPress(); }
+
   function cleanupPress() { endDragVisuals(); pi = null; }
 
   function doDrop() {
+    blockClick = true; setTimeout(() => blockClick = false, 600); // click sintético no slot de destino não age
     const src = pi.src;
     const over = pi.overEl ? +pi.overEl.dataset.index : -1;
     let changed = false;
