@@ -1,6 +1,6 @@
 # Roadmap de Features — Thor XIV Companion
 
-> Atualizado: 2026-11-16. Referência de layout/tracks: [DS-Forever](https://github.com/Jreese702/DS-Forever) (companion dual-screen de WoW no Thor) — borrowed: tracks de features, companion-first, guias offline. Mantemos nossa arquitetura (bridge + WebSocket + PWA/APK) e nossas features.
+> Atualizado: 2026-11-17 (checkpoint bugfixes v0.5.6). Referência de layout/tracks: [DS-Forever](https://github.com/Jreese702/DS-Forever) (companion dual-screen de WoW no Thor) — borrowed: tracks de features, companion-first, guias offline. Mantemos nossa arquitetura (bridge + WebSocket + PWA/APK) e nossas features.
 
 ---
 
@@ -11,18 +11,16 @@
 - APK Thor: tela de baixo, descoberta mDNS/scan, demo offline, watchdog
 - PC: instalação deployada, firewall LAN-only, IP estático .194; deploy de novas builds via `scripts/deploy-pc.sh` (obrigatório após cada build do plugin)
 
-## T2 — Macro / Hotkey bar (PRIORIDADE MÁXIMA) 🔨 em curso
+## T2 — Macro / Hotkey bar ✅ checkpoint v0.5.6 (feature-complete p/ v1)
 
-O uso mais útil do segundo ecrã: tocar um botão na tela de baixo e o jogo agir.
-
-- [x] **M1**: grid de 12 slots com **executor nativo** (`RaptureShellModule` — zero plugin extra): tipo `comando` (1 linha) ou `sequência` (macro próprio multi-linha com delay); editor, confirmação por botão, import/export. Tipo `Macro por ID do jogo` removido com o Telesto.
-- [x] **M1.5**: tipo **Skill da classe (nativo)** — botões chamam `ActionManager.UseAction` (`UseActionMode.None` = "hotbar button press" no clientstructs), com catálogo de ações da classe via planilhas (`GET /api/actions`, cache por job) e alvos `auto/target/self/p1–p8`. Sem `/ac` textual, sem nome ambíguo, sem Telesto
-- [ ] M2: cooldown real nos botões (recarga via ActionManager no payload; botão mostra recarga e disponibilidade)
-- [ ] M3: páginas de hotbar (swipe horizontal) + por-zone/per-job automáticos
-- [ ] M4: reordenar arrastando; importar/exportar JSON
-- [ ] M5: ícones reais das ações (arquivos do jogo via bridge)
-
-Sem dependências externas. O executor é 100% nativo (RaptureShellModule); nenhum plugin externo é necessário.
+- [x] **M1**: grid com **executor nativo** (`RaptureShellModule`): `comando` (1 linha) ou `sequência` (multi-linha com delay); editor, confirmação, import/export
+- [x] **M1.5**: tipo **Skill (nativo)** — `ActionManager.UseAction`, catálogo da classe (`GET /api/actions`, `icon` + `desc` via `ActionTransient`), alvos `auto/target/self/p1–p8`
+- [x] **M1.7 (UX, 0.5.1–0.5.6)**: ícones CDN, tooltip long-press persistente, editor sheet + segmented, slots editáveis, **drag & drop** (move/swap), **grid 3x3/4x3/4x4** (Config centralizado), layout "uma aba por vez", identidade visual FFXIV (tokens.css), gesture-proofing WebView
+- [x] **M4**: reordenar arrastando + import/export JSON
+- [x] **M5 (re-escopo)**: ícones via CDN xivapi (online-first)
+- [ ] **M2**: cooldown real nos botões — próximo item natural
+- [ ] **M3**: páginas de hotbar (swipe) — avaliar demanda (grid configurável já atende)
+- Qualidade: `scripts/check-dom.mjs` no smoke; lições no `AGENTS.md`; ciclo = build → smoke → versão → APK → deploy PC → commit
 
 ## T3 — Mapa útil
 
