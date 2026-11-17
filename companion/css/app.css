@@ -219,15 +219,15 @@ body {
 .hb-tt-name { font-weight: 700; font-size: 16px; color: var(--text); }
 .hb-tt-desc { margin-top: 6px; font-size: 14px; color: var(--text-muted); line-height: 1.45; word-wrap: break-word; }
 .hb-tt-id { margin-top: 8px; font-size: 12px; font-family: ui-monospace, monospace; color: var(--text-muted); }
-/* sheet de configuracao da grade (overlay, acima do editor/tooltip) */
-#hb-config { position: fixed; inset: 0; background: var(--backdrop); display: flex; align-items: center; justify-content: center; z-index: 55; padding: 12px; }
-.hb-presets { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
-.hb-preset-btn { display: flex; flex-direction: column; align-items: center; gap: 6px; min-height: 92px; border-radius: var(--radius); border: 2px solid var(--border); background: var(--panel-solid); color: var(--text); font-size: 15px; cursor: pointer; }
-.hb-preset-btn:hover { filter: brightness(1.08); }
-.hb-preset-btn:focus-visible { outline: none; box-shadow: var(--focus-glow); }
-.hb-preset-btn.sel { border-color: var(--gold); }
-.hb-preset-big { font-size: 24px; font-weight: 700; }
-.hb-preset-small { font-size: 12px; color: var(--text-muted); }
+/* popover de configuracao da grade (ancorado no botao Config, tamanho minimo) */
+#hb-gridcfg { position: fixed; z-index: 45; width: min(360px, 94vw); background: var(--panel-solid); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 8px 24px var(--shadow); padding: 10px 12px 12px; }
+.hb-pop-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.hb-pop-hint { font-size: 12px; margin-bottom: 6px; }
+.hb-presets { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.hb-preset-btn { display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 64px; padding: 8px 4px; border-radius: var(--radius); background: var(--panel-solid); color: var(--text); font-size: 13px; cursor: pointer; }
+.hb-preset-btn.sel { border-color: var(--gold); color: var(--gold-bright); }
+.hb-preset-big { font-size: 18px; font-weight: 700; }
+.hb-preset-small { font-size: 11px; color: var(--text-muted); }
 /* ghost do arraste */
 #hb-drag-ghost { position: fixed; pointer-events: none; z-index: 100; transform: translate(-50%, -50%); }
 #hb-drag-ghost.hidden { display: none; }

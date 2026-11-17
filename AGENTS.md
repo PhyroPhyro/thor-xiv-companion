@@ -41,3 +41,14 @@ README.md e no vault (`4. Projetos/Thor XIV Companion`).
 - Touch-first: alvos ≥44px; long-press = tooltip; nada depende de hover no Thor.
 - Estado da hotbar: `localStorage` (`hotbar.v1` slots, `hotbar.grid.v1` preset). Export/import JSON mantém todos os slots (inclusive além do preset ativo).
 - Segurança: nada de port-forward; bridge LAN-only; sem automação reativa no jogo.
+
+## Lições (erros que não se repetem)
+
+- **IDs únicos, sempre** (v0.5.3): botão e contêiner de overlay compartilharam o id `hb-config`;
+  `$("id")` pega o primeiro, e o CSS do overlay (`position:fixed; inset:0`) se aplicou ao botão,
+  virando um overlay full-screen inutilizável. Antes de commitar: `grep -c 'id="X"'` — cada id
+  deve aparecer exatamente uma vez no HTML gerado; conferir todo par botão↔contêiner criado.
+- **Overlay = menor forma possível** (v0.5.3): nada de modal full-screen para conteúdo pequeno
+  (menu de opções, presets). Usar popover ancorado no gatilho (`position:fixed` alinhado ao
+  `getBoundingClientRect()` do botão), com fechamento por toque fora dele + botão Fechar. Modal
+  com backdrop só quando o conteúdo for grande (ex.: editor de slot).

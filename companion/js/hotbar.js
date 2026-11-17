@@ -62,14 +62,14 @@
       <div id="hotbar-grid"></div>
       <div class="hb-tools">
         <button id="hb-edit">Editar</button>
-        <button id="hb-config">Config</button>
+        <button id="hb-gridbtn">Config</button>
         <button id="hb-export">Exportar</button>
         <button id="hb-import">Importar</button>
         <span id="hb-status" class="dim"></span>
       </div>
       <div id="hb-editor" class="hidden"></div>
       <div id="hb-confirm" class="hidden"></div>
-      <div id="hb-config" class="hidden"></div>
+      <div id="hb-gridcfg" class="hidden"></div>
       <div id="hb-tooltip" class="hidden">
         <div class="hb-tooltip-card">
           <div id="hb-tt-name" class="hb-tt-name"></div>
@@ -79,7 +79,7 @@
       </div>`;
     renderGrid();
     $("hb-edit").onclick = () => { editMode = !editMode; $("hb-edit").textContent = editMode ? "Pronto" : "Editar"; closeEditor(); renderGrid(); };
-    $("hb-config").onclick = openConfig;
+    $("hb-gridbtn").onclick = openConfig;
     $("hb-export").onclick = exportJson;
     $("hb-import").onclick = importJson;
 
@@ -417,37 +417,48 @@
   function kindIcon(s) { return s.icon == null ? (s.kind === "skill" ? "✦" : "") : s.icon; }
   function closeEditor() { editIdx = -1; hideTooltip(); const el = $("hb-editor"); if (el) { el.classList.add("hidden"); el.innerHTML = ""; } }
 
-  // ---- configuracao da grade (presets) ----
+  // ---- configuracao da grade (popover ancorado no botao Config) ----
   function openConfig() {
-    const el = $("hb-config");
+    const el = $("hb-gridcfg");
     const p = PRESETS[gridPreset];
     el.innerHTML = `
-      <div class="hb-sheet">
-        <div class="hb-sheet-head">
-          <button id="cfg-close">Fechar</button>
-          <span class="hb-sheet-title">Grade da hotbar</span>
-        </div>
-        <div class="hb-sheet-body">
-          <p class="dim">Mais slots = botoes menores</p>
-          <div class="hb-presets" id="cfg-presets"></div>
-        </div>
-      </div>`;
+      <div class="hb-pop-head"><span class="panel-title">Grade</span>
+        <button class="btn btn-ghost" id="cfg-close">Fechar</button></div>
+      <p class="hb-pop-hint dim">Mais slots = botoes menores</p>
+      <div class="hb-presets" id="cfg-presets"></div>`;
     const cont = $("cfg-presets");
     Object.keys(PRESETS).forEach((k) => {
       const pr = PRESETS[k];
       const bt = document.createElement("button");
       bt.type = "button";
-      bt.className = "hb-preset-btn" + (k === gridPreset ? " sel" : "");
+      bt.className = "btn hb-preset-btn" + (k === gridPreset ? " sel" : "");
       bt.dataset.preset = k;
       bt.innerHTML = `<span class="hb-preset-big">${pr.label}</span><span class="hb-preset-small">${pr.n} slots</span>`;
       bt.onclick = () => applyPreset(k);
       cont.appendChild(bt);
     });
+    // ancora: logo abaixo do botao Config, alinhado a direita dele
     el.classList.remove("hidden");
+    const btn = $("hb-gridbtn").getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    const w = r.width || 340;
+    let left = btn.right - w;
+    if (left < 8) left = 8;
+    el.style.left = Math.round(left) + "px";
+    el.style.top = Math.round(btn.bottom + 8) + "px";
     $("cfg-close").onclick = closeConfig;
-    el.onclick = (ev) => { if (ev.target === el) closeConfig(); };
+    document.addEventListener("pointerdown", cfgOutside, true);
   }
-  function closeConfig() { $("hb-config").classList.add("hidden"); }
+  function cfgOutside(ev) {
+    const el = $("hb-gridcfg");
+    if (el && !el.classList.contains("hidden") && !el.contains(ev.target)
+        && ev.target !== $("hb-gridbtn") && !$("hb-gridbtn").contains(ev.target)) closeConfig();
+  }
+  function closeConfig() {
+    const el = $("hb-gridcfg");
+    if (el) el.classList.add("hidden");
+    document.removeEventListener("pointerdown", cfgOutside, true);
+  }
   function applyPreset(k) {
     gridPreset = k;
     localStorage.setItem(GRID_KEY, k);
