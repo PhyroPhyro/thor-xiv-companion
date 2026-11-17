@@ -55,6 +55,11 @@ README.md e no vault (`4. Projetos/Thor XIV Companion`).
   de ligar handlers → hotbar vazia e botões mortos por 3 versões (o overlay full-screen do Config
   escondia o problema). Regra: referenciar `$(...)` no momento do uso ou atribuir após o innerHTML;
   nunca capturar em escopo de carga um id que só nasce em template.
+- **WebView Android: scroll × drag** (v0.5.7): `touch-action: none` nos slots matou o scroll da aba
+  inteira, e pointer events perdem a corrida pro scroll (pointercancel antes do threshold → drag nunca
+  começava). Regra: em lista rolável NUNCA `touch-action:none` no item; usar touch events com
+  `touchmove passive:false` e padrão hold-then-drag — pan imediato deixa o browser rolar; segurar ~250ms
+  → `preventDefault` dali em diante → mover = drag; mover antes do arm = cancelar gesto próprio.
 - **Re-render = limpar antes de appendChild** (v0.5.6): `renderGrid()` sem `innerHTML = ""`
   acumulava os slots a cada chamada (grid duplicava e "embaralhava" ao alternar Editar/Pronto).
   Regra: toda função de render limpa o contêiner antes de recriar.
