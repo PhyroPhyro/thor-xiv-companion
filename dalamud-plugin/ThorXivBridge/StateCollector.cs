@@ -348,20 +348,12 @@ public sealed class StateCollector
         float sf = agent.CurrentMapSizeFactor == 0 ? 100f : agent.CurrentMapSizeFactor;
         float offX = agent.CurrentOffsetX, offY = agent.CurrentOffsetY;
 
-        // The static MapMarkers array is (re)built by the map UI layer. If our first read for a
-        // zone comes back nearly empty (player never opened the map this session), ask the agent
-        // itself to create them — same call the UI does — then read again.
+        // Layer 1: agent runtime static array (populated by the map UI; kept best-effort).
         AppendPoisFromSpan(sb, agent.MapMarkers, sf, offX, offY, ref n, seen);
-        if (n < 3)
-        {
-            try
-            {
-                agent.CreateMapMarkers(false);
-                AppendPoisFromSpan(sb, agent.MapMarkers, sf, offX, offY, ref n, seen);
-            }
-            catch { /* keep what we already had */ }
-        }
         AppendPoisFromWarpSpan(sb, agent.WarpMarkers, sf, offX, offY, ref n, seen);
+        // Layer 2: the MapMarker sheet itself — the source of truth the map UI draws from
+        // (aetheryte crystals, shops, gates) — independent of UI state.
+        AppendPoisFromSheet(sb, agent, sf, offX, offY, ref n, seen);
 
         try
         {
@@ -392,6 +384,40 @@ public sealed class StateCollector
 
         sb.Append(']');
         return sb.ToString();
+    }
+
+    // Layer 2: MapMarker.exd rows (the game's own map UI source). Sub-row addressing via
+    // CurrentMapMarkerRange; each sub-row is one drawn marker.
+    private void AppendPoisFromSheet(System.Text.StringBuilder sb,
+        FFXIVClientStructs.FFXIV.Client.UI.Agent.AgentMap agent, float sf, float offX, float offY,
+        ref int n, System.Collections.Generic.HashSet<string> seen)
+    {
+        try
+        {
+            uint range = agent.CurrentMapMarkerRange;
+            if (range == 0) return;
+            var sheet = _dataManager.GetSubrowExcelSheet<Lumina.Excel.Sheets.MapMarker>();
+            if (sheet == null || !sheet.TryGetRow(range, out var subrows)) return;
+            int subCount = subrows.Count;
+            for (int r = 0; r < subCount && n < 600; r++)
+            {
+                var row = subrows[r];
+                uint iconId = row.Icon;
+                if (iconId == 0) continue;
+                float cx = row.X * 2f / sf + 1f - 0.02f * offX;
+                float cy = row.Y * 2f / sf + 1f - 0.02f * offY;
+                if (cx < 0f || cx > 200f || cy < 0f || cy > 200f) continue;
+                string label = "";
+                try
+                {
+                    if (row.PlaceNameSubtext.RowId != 0)
+                        label = row.PlaceNameSubtext.ValueNullable?.Name.ToString() ?? "";
+                }
+                catch { }
+                AddPoi(sb, ref n, seen, cx, cy, iconId, label);
+            }
+        }
+        catch { /* sheet unavailable this frame */ }
     }
 
     private static void AppendPoisFromSpan(System.Text.StringBuilder sb,

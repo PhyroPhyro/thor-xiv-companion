@@ -35,9 +35,11 @@
   // fica definida para receber ids reais quando confirmados pelos dados.
   // classes por ícone REAL (inspecionados via xivapi):
   // 60453 = cristal (aetheryte) | 60311 = chocobinho dourado (aethernet) | 60441 = triângulo (aetheryte de distrito/emerald)
-  const POI_AETHERYTE_ICONS = new Set([60453]);
-  const POI_AETHERNET_ICONS = new Set([60311]);
-  const POI_DISTRICT_ICONS = new Set([60441]);
+  // icon sets cover BOTH marker families the game draws: static sheet ids (60xxx) and
+  // runtime event-layer ids (71xxx): 71001/60453 aetheryte, 71021/60311 aethernet, 71151 district
+  const POI_AETHERYTE_ICONS = new Set([60453, 71001]);
+  const POI_AETHERNET_ICONS = new Set([60311, 71021]);
+  const POI_DISTRICT_ICONS = new Set([60441, 71151]);
 
   const RESOLVE_TIMEOUT_MS = 6000;
   const XIVAPI_BASE = "https://v2.xivapi.com";
